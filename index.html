@@ -639,6 +639,7 @@
         fenceMesh.setMatrixAt(i, _dummy.matrix);
       }
       fenceMesh.instanceMatrix.needsUpdate = true;
+      fenceMesh.frustumCulled = false;
       scene.add(fenceMesh);
 
       // ==========================================
@@ -905,9 +906,11 @@
 
         // Insert into spatial grid
         insertIntoGrid(idx, x, z);
-      }
       treeInstancedMesh.instanceMatrix.needsUpdate = true;
-      treeInstancedMesh.computeBoundingSphere();
+      treeInstancedMesh.frustumCulled = false;
+      if (typeof treeInstancedMesh.computeBoundingSphere === 'function') {
+        treeInstancedMesh.computeBoundingSphere();
+      }
 
       // Seed Houses (550)
       for (let i = 0; i < TOTAL_HOUSES; i++) {
@@ -945,10 +948,11 @@
           obstacleSoA.initialMatrices[idx * 16 + m] = mElements[m];
         }
 
-        insertIntoGrid(idx, x, z);
-      }
       houseInstancedMesh.instanceMatrix.needsUpdate = true;
-      houseInstancedMesh.computeBoundingSphere();
+      houseInstancedMesh.frustumCulled = false;
+      if (typeof houseInstancedMesh.computeBoundingSphere === 'function') {
+        houseInstancedMesh.computeBoundingSphere();
+      }
 
       // ==========================================
       // 6. POPPING PUFF PARTICLES (ON HIT)
@@ -977,6 +981,7 @@
         particleInstancedMesh.setMatrixAt(i, zeroScaleMat);
       }
       particleInstancedMesh.instanceMatrix.needsUpdate = true;
+      particleInstancedMesh.frustumCulled = false;
 
       function spawnParticles(x, y, z, colorHex, count = 12) {
         let spawned = 0;
