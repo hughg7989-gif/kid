@@ -47,7 +47,7 @@
         position: fixed;
         inset: 0;
         z-index: 100;
-        background: rgba(15, 23, 42, 0.85);
+        background: rgba(15, 23, 42, 0.88);
         border: 4px dashed #38bdf8;
         display: flex;
         flex-direction: column;
@@ -73,6 +73,135 @@
       .drop-sub {
         font-size: 15px;
         color: #94a3b8;
+      }
+
+      /* AI Prompt Modal */
+      #aiPromptModal {
+        position: fixed;
+        inset: 0;
+        z-index: 120;
+        background: rgba(15, 23, 42, 0.94);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .modal-card {
+        background: #1e293b;
+        border: 2px solid rgba(56, 189, 248, 0.4);
+        border-radius: 24px;
+        padding: 24px 28px;
+        max-width: 680px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        color: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+      }
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .modal-title {
+        font-size: 20px;
+        font-weight: 900;
+        color: #38bdf8;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn-close-modal {
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        font-size: 22px;
+        cursor: pointer;
+        padding: 4px;
+      }
+      .modal-desc {
+        font-size: 13px;
+        color: #94a3b8;
+        line-height: 1.5;
+      }
+      .prompt-box {
+        width: 100%;
+        height: 140px;
+        background: #0f172a;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 11px;
+        color: #cbd5e1;
+        resize: none;
+        outline: none;
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .btn-copy-prompt {
+        background: #0284c7;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .btn-copy-prompt:hover {
+        background: #0369a1;
+      }
+      .btn-sample-download {
+        background: rgba(255, 255, 255, 0.08);
+        color: #f1f5f9;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .paste-section {
+        margin-top: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 12px;
+      }
+      .paste-input {
+        width: 100%;
+        height: 80px;
+        background: #0f172a;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        padding: 8px;
+        font-family: monospace;
+        font-size: 11px;
+        color: #cbd5e1;
+        resize: none;
+        outline: none;
+      }
+      .btn-mount-paste {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 10px;
+        font-weight: 800;
+        font-size: 13px;
+        cursor: pointer;
+        align-self: flex-start;
       }
 
       /* Startup / Pairing Overlay */
@@ -296,7 +425,7 @@
         flex-direction: column;
         align-items: center;
         gap: 6px;
-        max-width: 94vw;
+        max-width: 95vw;
       }
       .bottom-dock {
         background: rgba(15, 23, 42, 0.88);
@@ -371,32 +500,33 @@
         display: flex;
         align-items: center;
         gap: 5px;
-        transition: transform 0.1s;
       }
       .btn-add-vehicle:hover {
         filter: brightness(1.1);
       }
 
-      .btn-download-template {
-        background: transparent;
-        border: 1px dashed rgba(255, 255, 255, 0.25);
-        color: #94a3b8;
-        padding: 5px 10px;
-        border-radius: 10px;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .btn-download-template:hover {
+      .btn-ai-prompt {
+        background: linear-gradient(135deg, #8b5cf6, #6366f1);
         color: #ffffff;
-        border-color: #ffffff;
+        border: 1px solid #a78bfa;
+        padding: 6px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .btn-ai-prompt:hover {
+        filter: brightness(1.1);
       }
 
       /* Stats & Toggles Row */
       .dock-row-stats {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 14px;
         width: 100%;
         justify-content: center;
         flex-wrap: wrap;
@@ -489,6 +619,41 @@
     <!-- Hidden file input for opening vehicle folder -->
     <input type="file" id="addVehicleFileInput" accept=".js" style="display: none;" />
 
+    <!-- AI Vehicle Generator Modal -->
+    <div id="aiPromptModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span>✨</span>
+            <span>Generate Any Vehicle with AI</span>
+          </div>
+          <button id="closeAiPromptBtn" class="btn-close-modal">✕</button>
+        </div>
+
+        <p class="modal-desc">
+          Copy this prompt and send it to <strong>ChatGPT, Claude, or Gemini</strong> along with your description or photo (e.g. <em>"Yellow CAT Excavator"</em> or <em>"Red Monster Truck with flames"</em>). The AI will generate a .js file you can drop into the game!
+        </p>
+
+        <!-- Prompt Text Area -->
+        <textarea id="aiPromptTextArea" class="prompt-box" readonly></textarea>
+
+        <div class="modal-actions">
+          <button id="copyAiPromptBtn" class="btn-copy-prompt">📋 Copy Master AI Prompt</button>
+          <button id="downloadSampleExcavatorBtn" class="btn-sample-download">📥 Download Sample Excavator.js</button>
+          <button id="testDriveExcavatorBtn" class="btn-sample-download" style="background: rgba(234, 179, 8, 0.2); border-color: #facc15; color: #facc15; font-weight: 700;">🚜 Test-Drive Excavator Now</button>
+        </div>
+
+        <!-- Direct Paste & Play Section -->
+        <div class="paste-section">
+          <div style="font-size: 13px; font-weight: 700; color: #f1f5f9;">
+            Or Paste AI Output Code Here:
+          </div>
+          <textarea id="pasteCodeInput" class="paste-input" placeholder="Paste the code returned by ChatGPT / Claude / Gemini here..."></textarea>
+          <button id="mountPastedCodeBtn" class="btn-mount-paste">🚀 Mount &amp; Play Immediately</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Startup / Pairing UI -->
     <div id="pairingOverlay">
       <div class="pairing-card">
@@ -518,7 +683,7 @@
             <span>Open Phone Controller (New Tab)</span>
           </a>
           <button id="desktopModeBtn" class="btn-desktop-mode">
-            🎮 Play with Keyboard (Arrows + Space to Toss)
+            🎮 Play with Keyboard (Arrows + Space to Jump)
           </button>
           <button id="resetCodeBtn" class="btn-reset-code">Generate New Room Code</button>
         </div>
@@ -549,7 +714,7 @@
       </div>
 
       <div class="dock-container">
-        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles, God Mode &amp; Custom Car</button>
+        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles, AI Car &amp; Controls</button>
         <div id="bottomDock" class="bottom-dock">
           <!-- Vehicle Selector Row -->
           <div class="vehicle-row">
@@ -559,8 +724,10 @@
               <span>📁</span>
               <span>+ Add Car .js</span>
             </button>
-            <button id="downloadTemplateBtn" class="btn-download-template" title="Download sample custom vehicle code">
-              📥 Sample .js
+            <!-- AI Prompt Generator Button -->
+            <button id="openAiPromptBtn" class="btn-ai-prompt">
+              <span>✨</span>
+              <span>AI Vehicle Generator</span>
             </button>
           </div>
 
@@ -578,8 +745,9 @@
               <span>MODE</span>
               <span id="inputModeValue" class="dock-value">Endless Cruise</span>
             </div>
-            <button id="godModePCBtn" class="btn-hud-toggle active-green">🚀 God Mode: ON</button>
-            <button id="tossJumpPCBtn" class="btn-hud-toggle" style="color: #facc15;">🚀 Toss in Air (Space)</button>
+            <button id="godModePCBtn" class="btn-hud-toggle active-green">🚀 Toss/Boost: ON</button>
+            <button id="pushBoostPCBtn" class="btn-hud-toggle" style="color: #38bdf8;">💨 Push Boost (W)</button>
+            <button id="tossJumpPCBtn" class="btn-hud-toggle" style="color: #facc15;">🚀 Jump on Land (Space)</button>
             <button id="invertTogglePCBtn" class="btn-hud-toggle">🔄 Invert: OFF</button>
           </div>
         </div>

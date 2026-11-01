@@ -1,4 +1,4 @@
-/* Toddler Toy Car 3D - High-Performance Procedural World with God Mode & Custom Vehicles */
+/* Toddler Toy Car 3D - High-Performance Procedural World with God Mode, 3D Physics & AI Car Importer */
 
 import { SoundEngine } from './audio.js';
 import { VEHICLES, getVehicleById } from './vehicles/index.js';
@@ -48,9 +48,9 @@ const COUNT_STREETLAMPS = 240;
 const TOTAL_OBSTACLES = COUNT_TREES + COUNT_HOUSES + COUNT_BARNS + COUNT_HAYBALES + COUNT_TOYBLOCKS + COUNT_STREETLAMPS;
 
 const obstacleSoA = {
-  positions: new Float32Array(TOTAL_OBSTACLES * 2), // [x, z, ...]
+  positions: new Float32Array(TOTAL_OBSTACLES * 2),
   radii: new Float32Array(TOTAL_OBSTACLES),
-  states: new Uint8Array(TOTAL_OBSTACLES),          // 0 = Active, 1 = Crumbling, 2 = Smashed
+  states: new Uint8Array(TOTAL_OBSTACLES),          // 0: Active, 1: Crumbling, 2: Smashed
   types: new Uint8Array(TOTAL_OBSTACLES),           // 0: Tree, 1: House, 2: Barn, 3: Hay, 4: Block, 5: Lamp
   instanceIndices: new Uint32Array(TOTAL_OBSTACLES),
   crumbleProgress: new Float32Array(TOTAL_OBSTACLES),
@@ -85,7 +85,7 @@ function insertIntoGrid(obstacleIdx, relX, relZ) {
 }
 
 // ==========================================
-// 3. THREE.JS SCENE & STATIONARY REAL ROAD MAP
+// 3. THREE.JS SCENE & REAL FIXED ROAD NETWORK
 // ==========================================
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
@@ -104,7 +104,7 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 container.appendChild(renderer.domElement);
 
 // Lighting
-const hemiLight = new THREE.HemisphereLight(0xfffdf5, 0x38bdf8, 0.7);
+const hemiLight = new THREE.HemisphereLight(0xfffdf5, 0x38bdf8, 0.75);
 scene.add(hemiLight);
 
 const sunLight = new THREE.DirectionalLight(0xfffaed, 1.25);
@@ -122,7 +122,7 @@ sunLight.shadow.bias = -0.0005;
 scene.add(sunLight);
 scene.add(sunLight.target);
 
-// High-Fidelity Stationary Road & Meadow Canvas Texture
+// High-Fidelity Fixed Ground & Road Texture
 function createStationaryRoadTexture() {
   const size = 1024;
   const cvs = document.createElement('canvas');
@@ -130,11 +130,10 @@ function createStationaryRoadTexture() {
   cvs.height = size;
   const ctx = cvs.getContext('2d');
 
-  // 1. Lush Green Meadow
+  // Grass meadow background
   ctx.fillStyle = '#86efac';
   ctx.fillRect(0, 0, size, size);
 
-  // Checkerboard grass lawn tiles
   ctx.fillStyle = '#6ee7b7';
   const tileSize = 64;
   for (let x = 0; x < size; x += tileSize) {
@@ -145,7 +144,7 @@ function createStationaryRoadTexture() {
     }
   }
 
-  // Cute flower patches in grassy areas away from road
+  // Cute flower patches in meadow
   const flowerColors = ['#fef08a', '#f472b6', '#ffffff', '#fed7aa'];
   for (let i = 0; i < 80; i++) {
     const fx = Math.random() * size;
@@ -158,8 +157,7 @@ function createStationaryRoadTexture() {
     }
   }
 
-  // 2. Real Paved Road Network (Crossroad through tile center)
-  // Tile corresponds to 100 world units. Road width = 14 world units (~143 canvas px).
+  // Asphalt Crossroads (Corresponds to 100 units world interval)
   const roadPx = 144;
   const center = size / 2;
 
@@ -173,7 +171,7 @@ function createStationaryRoadTexture() {
   ctx.fillRect(center - roadPx / 2, 0, roadPx, size);
   ctx.fillRect(0, center - roadPx / 2, size, roadPx);
 
-  // Solid White Shoulder Lines
+  // Solid White Edge Lines
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(center - roadPx / 2 + 6, 0, 4, size);
   ctx.fillRect(center + roadPx / 2 - 10, 0, 4, size);
@@ -193,7 +191,7 @@ function createStationaryRoadTexture() {
     }
   }
 
-  // Zebra Pedestrian Crosswalks at Intersection
+  // Zebra Pedestrian Crosswalks
   ctx.fillStyle = '#ffffff';
   for (let k = -50; k <= 50; k += 20) {
     ctx.fillRect(center + k - 5, center - roadPx / 2 - 26, 12, 22);
@@ -209,8 +207,6 @@ function createStationaryRoadTexture() {
   return texture;
 }
 
-// Stationary World Ground Mesh
-// Fixed at (0, 0, 0) with 3000x3000 units. UV repeat = 3000 / 100 = 30.
 const GROUND_SIZE = 3000;
 const groundTexture = createStationaryRoadTexture();
 groundTexture.repeat.set(GROUND_SIZE / ROAD_INTERVAL, GROUND_SIZE / ROAD_INTERVAL);
@@ -226,9 +222,8 @@ groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
 
-// Function to keep ground aligned seamlessly if car drives kilometers away
+// Function to keep ground aligned seamlessly in discrete 100-unit steps
 function updateGroundPosition(carX, carZ) {
-  // Snap in discrete steps of ROAD_INTERVAL (100 units) so texture pattern never slides under wheels!
   const snapX = Math.round(carX / ROAD_INTERVAL) * ROAD_INTERVAL;
   const snapZ = Math.round(carZ / ROAD_INTERVAL) * ROAD_INTERVAL;
   if (Math.abs(groundMesh.position.x - snapX) >= ROAD_INTERVAL || Math.abs(groundMesh.position.z - snapZ) >= ROAD_INTERVAL) {
@@ -256,7 +251,7 @@ const setGeoColor = (geo, colorHex) => {
 };
 
 // ==========================================
-// 4. ENVIRONMENT GEOMETRIES (6 Procedural Types)
+// 4. ENVIRONMENT GEOMETRIES
 // ==========================================
 function createTreeGeometry() {
   const trunk = new THREE.CylinderGeometry(0.35, 0.55, 3.2, 7);
@@ -458,10 +453,12 @@ const carState = {
   x: 0,
   y: 0,                // 3D Altitude
   z: 0,
-  vy: 0,               // Vertical velocity for flight & throws
-  bonusSpeed: 0,       // Boost from physical throws
-  pitch: 0,            // Dynamic tilt angle
+  vy: 0,               // Vertical velocity
+  bonusSpeed: 0,       // Push boost
+  pitch: 0,            // Dynamic 3D tilt
   roll: 0,
+  targetPitch: 0,      // Physical pitch from phone
+  targetRoll: 0,       // Physical roll from phone
   isAirborne: false,
   angle: 0,            // Steering yaw
   targetAngle: 0,
@@ -607,7 +604,6 @@ function updateCrumblingAndInfiniteWrapping(dt) {
     let dz = oz - carState.z;
     let shifted = false;
 
-    // Toroidal wrap around car: If obstacle gets > HALF_SPAN behind the car, shift it ahead
     if (dx > HALF_SPAN) {
       ox -= WORLD_SPAN;
       dx -= WORLD_SPAN;
@@ -698,29 +694,31 @@ function lerpAngle(from, to, t) {
 }
 
 // ==========================================
-// 8. 3D PHYSICS & COLLISION SIMULATION
+// 8. 3D PHYSICS WITH REAL FLIP & ON-LAND DRIVE
 // ==========================================
 function checkCollisionsAndDrive(dt) {
-  // 1. Steering interpolation
+  // 1. Steering Yaw interpolation
   carState.angle = lerpAngle(carState.angle, carState.targetAngle, Math.min(1.0, dt * 5.5));
 
-  // 2. 3D Flight & Throw Dynamics (God Mode)
+  // 2. 3D Pitch & Roll from Phone
+  // When phone is tilted or flipped upside down, the 3D car reflects that in real-time!
+  carState.pitch += (carState.targetPitch - carState.pitch) * Math.min(1.0, dt * 7.0);
+  carState.roll += (carState.targetRoll - carState.roll) * Math.min(1.0, dt * 7.0);
+
+  // Determine if wheels are on land:
+  // Upright when cos(pitch) * cos(roll) > 0.4
+  const isUpright = Math.cos(carState.pitch) * Math.cos(carState.roll);
+  const wheelsOnLand = (carState.y <= 0.08) && (isUpright > 0.35);
+
+  // 3. 3D Flight & Jump Dynamics
   if (carState.isAirborne || carState.y > 0) {
-    // Gravity pulls vehicle down
     carState.vy -= 28.0 * dt;
     carState.y += carState.vy * dt;
 
-    // Self-Righting Spring Kinematics: continuously pull pitch and roll back to 0!
-    // The car NEVER flips upside down!
-    carState.pitch *= Math.exp(-6.0 * dt);
-    carState.roll *= Math.exp(-6.0 * dt);
-
-    // Landing on ground
+    // Land on ground
     if (carState.y <= 0) {
       carState.y = 0;
       carState.vy = 0;
-      carState.pitch = 0;
-      carState.roll = 0;
       if (carState.isAirborne) {
         carState.isAirborne = false;
         soundEngine.playLandingThud();
@@ -729,25 +727,34 @@ function checkCollisionsAndDrive(dt) {
     }
   }
 
-  // Bonus speed decay
+  // Bonus speed decay (from push/toss)
   if (carState.bonusSpeed > 0) {
     carState.bonusSpeed = Math.max(0, carState.bonusSpeed - dt * 10.0);
   }
 
-  // Total forward speed
-  const totalForwardSpeed = carState.currentSpeed + carState.bonusSpeed;
+  // 4. Movement: "obviously goes forward when is with wheels on land"
+  // When wheels are on land, cruise forward at currentSpeed + bonusSpeed.
+  // When flipped upside down in accident, wheels don't push the ground!
+  let forwardDriveSpeed = 0;
+  if (wheelsOnLand) {
+    forwardDriveSpeed = carState.currentSpeed + carState.bonusSpeed;
+  } else {
+    // In air or upside down, car only carries residual coasting momentum
+    forwardDriveSpeed = carState.bonusSpeed * 0.7;
+  }
+
   const forwardX = Math.sin(carState.angle);
   const forwardZ = Math.cos(carState.angle);
 
-  carState.x += forwardX * totalForwardSpeed * dt;
-  carState.z += forwardZ * totalForwardSpeed * dt;
+  carState.x += forwardX * forwardDriveSpeed * dt;
+  carState.z += forwardZ * forwardDriveSpeed * dt;
 
-  // Update stationary ground mesh alignment (snaps discretely per 100 units, no treadmill!)
+  // Discrete ground snap
   updateGroundPosition(carState.x, carState.z);
 
-  // 3. Collision Detection (Only collides when vehicle is near ground level: y < 3.5)
+  // 5. Collision Detection (Only collides when vehicle is near ground: y < 3.0 and moving)
   let isCollidingThisFrame = false;
-  if (carState.y < 3.5) {
+  if (carState.y < 3.0 && forwardDriveSpeed > 1.0) {
     const centerCellX = Math.floor(HALF_SPAN / GRID_CELL_SIZE);
     const centerCellZ = Math.floor(HALF_SPAN / GRID_CELL_SIZE);
     const vehicleRadius = currentVehicleDef.id === 'bus' ? 2.2 : (currentVehicleDef.id === 'truck' ? 2.0 : 1.7);
@@ -796,25 +803,25 @@ function checkCollisionsAndDrive(dt) {
     }
   }
 
-  // 4. Smooth speed dynamics: slows down to ~30% when pushing through obstacles, NEVER stops
+  // Smooth speed dynamics on ground
   const targetSpeed = isCollidingThisFrame ? currentVehicleDef.minSlowdownSpeed : currentVehicleDef.baseSpeed;
   const accelRate = isCollidingThisFrame ? 18.0 : 6.0;
   carState.currentSpeed += (targetSpeed - carState.currentSpeed) * Math.min(1.0, dt * accelRate);
 
-  soundEngine.updateEnginePitch(totalForwardSpeed / currentVehicleDef.baseSpeed);
+  soundEngine.updateEnginePitch(wheelsOnLand ? (forwardDriveSpeed / currentVehicleDef.baseSpeed) : 0.2);
 
-  // 5. Update Vehicle 3D Transform (X, Y, Z, Yaw, Pitch, Roll)
+  // 6. Update Vehicle 3D Transform
   if (currentVehicleMesh) {
     currentVehicleMesh.position.set(carState.x, carState.y, carState.z);
     currentVehicleMesh.rotation.set(carState.pitch, carState.angle, carState.roll, 'YXZ');
 
-    const rollSpeed = (totalForwardSpeed / 0.6) * dt;
+    const rollSpeed = (forwardDriveSpeed / 0.6) * dt;
     for (let w = 0; w < currentWheels.length; w++) {
       currentWheels[w].children[0].rotation.x += rollSpeed;
     }
   }
 
-  // 6. Camera follows vehicle smoothly
+  // 7. Third-Person Chase Camera
   const camDist = currentVehicleDef.id === 'bus' ? 19.0 : 16.0;
   const camHeight = (currentVehicleDef.id === 'bus' ? 9.5 : 8.5) + carState.y * 0.45;
 
@@ -832,35 +839,203 @@ function checkCollisionsAndDrive(dt) {
   sunLight.target.position.set(carState.x, carState.y, carState.z);
 }
 
-// Trigger God Mode physical launch / toss
-export function triggerGodLaunch(liftAmount = 18.0, tossAmount = 14.0) {
-  if (!godModeEnabled) return;
+// Jump / Lift trigger (ONLY when on land!)
+export function triggerJump(liftForce = 16.0) {
+  if (!godModeEnabled || !liftForceEnabled) return;
 
-  if (liftForceEnabled && liftAmount > 0) {
-    carState.vy = Math.min(32.0, 14.0 + liftAmount * 0.8);
-    carState.isAirborne = true;
-    carState.pitch = -0.22;
-    soundEngine.playFlightSwoosh();
-    spawnParticles(carState.x, carState.y + 0.5, carState.z, 20);
+  // "the jump should be only once is on land"
+  if (carState.y > 0.08 || carState.isAirborne) {
+    return; // Already in air! No double jumping.
   }
 
-  if (tossForceEnabled && tossAmount > 0) {
-    carState.bonusSpeed = Math.min(26.0, tossAmount * 1.1);
-    soundEngine.playFlightSwoosh();
-  }
+  carState.vy = Math.min(32.0, 14.0 + liftForce * 0.8);
+  carState.isAirborne = true;
+  soundEngine.playFlightSwoosh();
+  spawnParticles(carState.x, 0.4, carState.z, 20);
+}
+
+// Push Boost trigger (Forward force)
+export function triggerPushBoost(pushForce = 15.0) {
+  if (!godModeEnabled || !tossForceEnabled) return;
+  carState.bonusSpeed = Math.min(24.0, carState.bonusSpeed + pushForce * 1.1);
+  soundEngine.playFlightSwoosh();
 }
 
 // ==========================================
-// 9. DYNAMIC CUSTOM VEHICLE IMPORTER (Drop & File Picker)
+// 9. DYNAMIC VEHICLE IMPORTER & CODE LOADER
 // ==========================================
+export const SAMPLE_EXCAVATOR_CODE = `/* Procedural Construction Excavator Vehicle */
+export default {
+  id: 'excavator',
+  name: 'Yellow Excavator',
+  icon: '🏗️',
+  baseSpeed: 8.5,            // Slower, powerful construction vehicle (reference: normal car = 11.0)
+  minSlowdownSpeed: 4.0,     // Stronger push-through capability
+  soundPitch: 40,            // Heavy diesel engine thrum
+  hornFrequencies: [220.0, 293.66], // Deep industrial horn
+  engineType: 'triangle',
+
+  createMesh(THREE, mergeGeometries) {
+    const group = new THREE.Group();
+
+    // 1. Lower Track Chassis (Black Caterpillar treads)
+    const trackL = new THREE.BoxGeometry(0.7, 0.7, 4.4);
+    trackL.translate(-1.1, 0.45, 0);
+
+    const trackR = new THREE.BoxGeometry(0.7, 0.7, 4.4);
+    trackR.translate(1.1, 0.45, 0);
+
+    const trackCenter = new THREE.BoxGeometry(1.6, 0.4, 3.2);
+    trackCenter.translate(0, 0.5, 0);
+
+    // 2. Rotating Body Cabin (High-Vis Construction Yellow)
+    const cabin = new THREE.BoxGeometry(2.3, 1.8, 3.2);
+    cabin.translate(0, 1.7, -0.2);
+
+    // 3. Operator Glass Cockpit
+    const glass = new THREE.BoxGeometry(1.0, 1.4, 1.4);
+    glass.translate(-0.55, 1.9, 0.6);
+
+    // 4. Counterweight on Back
+    const counterweight = new THREE.BoxGeometry(2.3, 1.6, 0.8);
+    counterweight.translate(0, 1.6, -1.9);
+
+    // 5. Heavy Boom Arm
+    const boomBase = new THREE.BoxGeometry(0.4, 0.5, 2.6);
+    boomBase.rotateX(-0.5);
+    boomBase.translate(0.5, 2.4, 1.6);
+
+    const boomStick = new THREE.BoxGeometry(0.35, 0.4, 2.4);
+    boomStick.rotateX(0.7);
+    boomStick.translate(0.5, 2.7, 3.2);
+
+    // 6. Excavator Digging Bucket (Metal Scoop)
+    const bucket = new THREE.BoxGeometry(1.4, 0.8, 1.0);
+    bucket.rotateX(0.2);
+    bucket.translate(0.5, 1.2, 4.1);
+
+    // 7. Roof Flashing Amber Beacon
+    const beacon = new THREE.CylinderGeometry(0.18, 0.22, 0.35, 10);
+    beacon.translate(-0.55, 2.8, 0.6);
+
+    const setGeoColor = (geo, colorHex) => {
+      const col = new THREE.Color(colorHex);
+      const count = geo.attributes.position.count;
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = col.r;
+        colors[i * 3 + 1] = col.g;
+        colors[i * 3 + 2] = col.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    };
+
+    setGeoColor(trackL, 0x1e293b);          // Dark Rubber Treads
+    setGeoColor(trackR, 0x1e293b);
+    setGeoColor(trackCenter, 0x334155);
+    setGeoColor(cabin, 0xfacc15);           // High-Vis Caterpillar Yellow
+    setGeoColor(glass, 0x38bdf8);           // Tinted Cockpit Glass
+    setGeoColor(counterweight, 0x0f172a);   // Dark Steel Counterweight
+    setGeoColor(boomBase, 0xfacc15);        // Yellow Boom
+    setGeoColor(boomStick, 0xfacc15);
+    setGeoColor(bucket, 0x475569);          // Tough Steel Bucket
+    setGeoColor(beacon, 0xf97316);          // Safety Amber Light
+
+    const mergedBody = mergeGeometries([
+      trackL, trackR, trackCenter, cabin, glass,
+      counterweight, boomBase, boomStick, bucket, beacon
+    ]);
+
+    const bodyMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.4,
+      metalness: 0.2,
+    });
+    const bodyMesh = new THREE.Mesh(mergedBody, bodyMat);
+    bodyMesh.castShadow = true;
+    group.add(bodyMesh);
+
+    // 6 Track Rollers (3 per side)
+    const wheels = [];
+    const wheelPositions = [
+      [-1.1, 0.4, 1.4],
+      [-1.1, 0.4, 0.0],
+      [-1.1, 0.4, -1.4],
+      [1.1, 0.4, 1.4],
+      [1.1, 0.4, 0.0],
+      [1.1, 0.4, -1.4],
+    ];
+
+    const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.4, 12);
+    wheelGeo.rotateZ(Math.PI / 2);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+
+    wheelPositions.forEach((pos) => {
+      const wGroup = new THREE.Group();
+      const wMesh = new THREE.Mesh(wheelGeo, wheelMat);
+      wMesh.castShadow = true;
+      wGroup.add(wMesh);
+      wGroup.position.set(...pos);
+      group.add(wGroup);
+      wheels.push(wGroup);
+    });
+
+    // Contact shadow
+    const shadowGeo = new THREE.PlaneGeometry(3.4, 5.8);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x052e16,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+    });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.03;
+    group.add(shadow);
+
+    return { group, wheels };
+  }
+};`;
+
+export function sanitizeAndExtractVehicleCode(raw) {
+  let code = (raw || '').trim();
+
+  // 1. If wrapped in markdown code fence, extract code block
+  const markdownMatch = code.match(/```(?:javascript|js)?\s*([\s\S]*?)```/);
+  if (markdownMatch && markdownMatch[1]) {
+    code = markdownMatch[1].trim();
+  }
+
+  // 2. Strip any ES import statements so dynamic import doesn't fail on missing modules
+  code = code.replace(/import\s+[^;]+;?/g, '// [stripped import]');
+
+  // 3. Handle CommonJS module.exports = ...
+  if (/module\.exports\s*=/.test(code)) {
+    code = code.replace(/module\.exports\s*=/, 'export default ');
+  }
+
+  // 4. If code assigns to a variable but forgot export default
+  if (!code.includes('export default') && !code.includes('export const Vehicle') && !code.includes('export const ExcavatorVehicle')) {
+    const varMatch = code.match(/(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*\{/);
+    if (varMatch && varMatch[1]) {
+      code += `\nexport default ${varMatch[1]};`;
+    } else if (code.trim().startsWith('{') && code.trim().endsWith('}')) {
+      code = 'export default ' + code;
+    }
+  }
+
+  return code;
+}
+
 export async function loadCustomVehicleScript(codeString, fileName = 'custom_car.js') {
   try {
-    const blob = new Blob([codeString], { type: 'application/javascript' });
+    const cleanCode = sanitizeAndExtractVehicleCode(codeString);
+    const blob = new Blob([cleanCode], { type: 'application/javascript' });
     const blobUrl = URL.createObjectURL(blob);
-    const module = await import(blobUrl);
+    const module = await import(/* @vite-ignore */ blobUrl);
+    URL.revokeObjectURL(blobUrl);
 
-    // Support default export or named export
-    const customDef = module.default || module.Vehicle || Object.values(module)[0];
+    const customDef = module.default || module.Vehicle || module.ExcavatorVehicle || Object.values(module)[0];
 
     if (!customDef || typeof customDef.createMesh !== 'function') {
       alert('Custom vehicle file must export an object with createMesh(THREE, mergeGeometries).');
@@ -870,10 +1045,9 @@ export async function loadCustomVehicleScript(codeString, fileName = 'custom_car
     if (!customDef.id) customDef.id = 'custom_' + Date.now();
     if (!customDef.name) customDef.name = fileName.replace('.js', '');
     if (!customDef.icon) customDef.icon = '⭐';
-    if (!customDef.baseSpeed) customDef.baseSpeed = 12.0;
+    if (!customDef.baseSpeed) customDef.baseSpeed = 11.0;
     if (!customDef.minSlowdownSpeed) customDef.minSlowdownSpeed = 4.0;
 
-    // Check if vehicle already exists in registry
     const existingIdx = VEHICLES.findIndex(v => v.id === customDef.id);
     if (existingIdx >= 0) {
       VEHICLES[existingIdx] = customDef;
@@ -881,15 +1055,12 @@ export async function loadCustomVehicleScript(codeString, fileName = 'custom_car
       VEHICLES.push(customDef);
     }
 
-    // Save in localStorage to persist across reloads
-    localStorage.setItem('toycar_custom_js', codeString);
+    localStorage.setItem('toycar_custom_js', cleanCode);
     localStorage.setItem('toycar_custom_name', customDef.name);
 
-    // Rebuild vehicle menu & mount
     rebuildVehicleMenu();
     mountVehicle(customDef);
 
-    // Show celebratory toast
     const hornBubble = document.getElementById('hornBubble');
     if (hornBubble) {
       hornBubble.textContent = `🚀 Loaded ${customDef.name}!`;
@@ -908,7 +1079,7 @@ if (savedCustomCode) {
   loadCustomVehicleScript(savedCustomCode, localStorage.getItem('toycar_custom_name') || 'custom_car.js');
 }
 
-// Setup Drag & Drop on the window
+// Drag & Drop
 const dropOverlay = document.getElementById('dropOverlay');
 
 window.addEventListener('dragover', (e) => {
@@ -929,15 +1100,11 @@ window.addEventListener('drop', (e) => {
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
     const file = files[0];
-    if (file.name.endsWith('.js') || file.type.includes('javascript') || file.type.includes('text')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        loadCustomVehicleScript(event.target.result, file.name);
-      };
-      reader.readAsText(file);
-    } else {
-      alert('Please drop a valid .js vehicle file.');
-    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      loadCustomVehicleScript(event.target.result, file.name);
+    };
+    reader.readAsText(file);
   }
 });
 
@@ -956,24 +1123,183 @@ if (addVehicleFileInput) {
   });
 }
 
-// Download Sample Template JS Button
-const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
-if (downloadTemplateBtn) {
-  downloadTemplateBtn.addEventListener('click', () => {
-    fetch('/src/vehicles/custom_template.js')
-      .then(res => res.text())
-      .then(code => {
-        const blob = new Blob([code], { type: 'text/javascript' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'rocket-car.js';
-        a.click();
-      });
+// Download Sample Excavator Script (Embedded, 100% offline & reliable)
+const downloadSampleExcavatorBtn = document.getElementById('downloadSampleExcavatorBtn');
+if (downloadSampleExcavatorBtn) {
+  downloadSampleExcavatorBtn.addEventListener('click', () => {
+    const blob = new Blob([SAMPLE_EXCAVATOR_CODE], { type: 'application/javascript' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sample_excavator.js';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+}
+
+// Test-Drive Excavator Directly in Game
+const testDriveExcavatorBtn = document.getElementById('testDriveExcavatorBtn');
+if (testDriveExcavatorBtn) {
+  testDriveExcavatorBtn.addEventListener('click', () => {
+    loadCustomVehicleScript(SAMPLE_EXCAVATOR_CODE, 'sample_excavator.js');
+    if (aiPromptModal) aiPromptModal.style.display = 'none';
   });
 }
 
 // ==========================================
-// 10. PEERJS WEBRTC PAIRING & INPUT HANDLING
+// 10. AI VEHICLE GENERATOR PROMPT MODAL
+// ==========================================
+const aiPromptModal = document.getElementById('aiPromptModal');
+const openAiPromptBtn = document.getElementById('openAiPromptBtn');
+const closeAiPromptBtn = document.getElementById('closeAiPromptBtn');
+const copyAiPromptBtn = document.getElementById('copyAiPromptBtn');
+const aiPromptTextArea = document.getElementById('aiPromptTextArea');
+const pasteCodeInput = document.getElementById('pasteCodeInput');
+const mountPastedCodeBtn = document.getElementById('mountPastedCodeBtn');
+
+// Master AI Vehicle Prompt text
+export const MASTER_AI_PROMPT = `Generate a single, completely self-contained JavaScript ES module file (.js) for a 3D browser game vehicle.
+
+VEHICLE DESCRIPTION / REFERENCE:
+[USER INSTRUCTION: Describe your vehicle here, e.g. "Yellow Caterpillar Excavator with digging bucket", "Red Monster Truck with giant spiky wheels", "Police Cruiser with sirens", OR attach an image and say "Create this exact vehicle from the image"]
+
+SPEED BENCHMARK & CALIBRATION:
+The game's standard baseline is the Normal Toy Sports Car with baseSpeed = 11.0 m/s.
+Calibrate your vehicle's speed realistically using this 11.0 m/s benchmark:
+- Construction Excavator / Bulldozer / Steamroller: baseSpeed = 8.0 - 8.5 m/s
+- Farm Tractor / Slow Work Truck: baseSpeed = 9.0 m/s
+- Yellow School Bus: baseSpeed = 9.5 m/s
+- Heavy Dump Truck / Semi: baseSpeed = 10.0 m/s
+- Normal Toy Sports Car (REFERENCE BASELINE): baseSpeed = 11.0 m/s
+- Police Cruiser / Muscle Car: baseSpeed = 12.5 m/s
+- Formula 1 / Rocket Hypercar: baseSpeed = 15.0 - 16.0 m/s
+Choose the \`baseSpeed\` and \`minSlowdownSpeed\` (3.0 - 4.5) relative to the 11.0 baseline.
+
+TECHNICAL RULES:
+1. Do NOT write \`import * as THREE from 'three'\`. The game engine passes THREE and mergeGeometries into createMesh(THREE, mergeGeometries).
+2. Assemble composite 3D procedural geometries using Three.js primitives (BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry).
+3. Set vertex colors on each component using \`setGeoColor(geometry, hexColor)\` helper.
+4. Merge all static body parts into ONE single draw-call mesh via \`mergeGeometries([...])\`.
+5. The vehicle points forward along the +Z axis.
+6. Return { group, wheels } where wheels is an array of wheel groups so they spin automatically.
+
+OUTPUT FORMAT:
+Output ONLY the raw JavaScript code inside a single \`\`\`javascript code block:
+\`\`\`javascript
+export default {
+  id: 'custom_vehicle_id',
+  name: 'Vehicle Name',
+  icon: '🚜',
+  baseSpeed: 10.0, // Choose relative to normal car reference (11.0 m/s)
+  minSlowdownSpeed: 3.5,
+  soundPitch: 50, // 40 = heavy diesel rumble, 65 = sports car hum, 75 = high rev
+  hornFrequencies: [349.23, 440.0],
+  engineType: 'sawtooth', // 'sawtooth', 'triangle', or 'sine'
+  createMesh(THREE, mergeGeometries) {
+    const group = new THREE.Group();
+
+    // 1. Procedural Parts...
+    const chassis = new THREE.BoxGeometry(2.2, 0.8, 4.0);
+    chassis.translate(0, 0.7, 0);
+
+    const cabin = new THREE.BoxGeometry(1.8, 1.0, 2.0);
+    cabin.translate(0, 1.6, -0.2);
+
+    const setGeoColor = (geo, colorHex) => {
+      const col = new THREE.Color(colorHex);
+      const count = geo.attributes.position.count;
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = col.r;
+        colors[i * 3 + 1] = col.g;
+        colors[i * 3 + 2] = col.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    };
+
+    setGeoColor(chassis, 0xfacc15);
+    setGeoColor(cabin, 0x38bdf8);
+
+    const merged = mergeGeometries([chassis, cabin]);
+    const bodyMesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 }));
+    bodyMesh.castShadow = true;
+    group.add(bodyMesh);
+
+    // Wheels...
+    const wheels = [];
+    const wheelPositions = [[-1.1, 0.5, 1.2], [1.1, 0.5, 1.2], [-1.1, 0.5, -1.2], [1.1, 0.5, -1.2]];
+    const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.35, 12);
+    wheelGeo.rotateZ(Math.PI / 2);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+
+    wheelPositions.forEach((pos) => {
+      const wGroup = new THREE.Group();
+      const wMesh = new THREE.Mesh(wheelGeo, wheelMat);
+      wMesh.castShadow = true;
+      wGroup.add(wMesh);
+      wGroup.position.set(...pos);
+      group.add(wGroup);
+      wheels.push(wGroup);
+    });
+
+    // Shadow
+    const shadowGeo = new THREE.CircleGeometry(2.2, 16);
+    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x052e16, transparent: true, opacity: 0.4, depthWrite: false });
+    const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.03;
+    group.add(shadow);
+
+    return { group, wheels };
+  }
+};
+\`\`\``;
+
+if (aiPromptTextArea) {
+  aiPromptTextArea.value = MASTER_AI_PROMPT;
+}
+
+if (openAiPromptBtn && aiPromptModal) {
+  openAiPromptBtn.addEventListener('click', () => {
+    aiPromptModal.style.display = 'flex';
+  });
+}
+
+if (closeAiPromptBtn && aiPromptModal) {
+  closeAiPromptBtn.addEventListener('click', () => {
+    aiPromptModal.style.display = 'none';
+  });
+}
+
+if (copyAiPromptBtn) {
+  copyAiPromptBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(MASTER_AI_PROMPT).then(() => {
+      copyAiPromptBtn.textContent = '✓ Copied to Clipboard!';
+      copyAiPromptBtn.style.background = '#10b981';
+      setTimeout(() => {
+        copyAiPromptBtn.textContent = '📋 Copy Master AI Prompt';
+        copyAiPromptBtn.style.background = '#0284c7';
+      }, 2000);
+    });
+  });
+}
+
+// Mount Pasted Code Button
+if (mountPastedCodeBtn && pasteCodeInput) {
+  mountPastedCodeBtn.addEventListener('click', () => {
+    let code = pasteCodeInput.value.trim();
+    if (!code) {
+      alert('Please paste some vehicle JavaScript code first.');
+      return;
+    }
+    loadCustomVehicleScript(code, 'ai_vehicle.js');
+    if (aiPromptModal) aiPromptModal.style.display = 'none';
+  });
+}
+
+// ==========================================
+// 11. PEERJS WEBRTC PAIRING & INPUT HANDLING
 // ==========================================
 const roomCodeVal = document.getElementById('roomCodeVal');
 const pairingOverlay = document.getElementById('pairingOverlay');
@@ -1034,18 +1360,25 @@ function initHostPeer() {
         connDot.textContent = '●';
       }
       if (connStatusText) connStatusText.textContent = 'PHONE CONNECTED 📱';
-      if (inputModeValue) inputModeValue.textContent = 'Phone Gyro';
+      if (inputModeValue) inputModeValue.textContent = 'Phone Gyro 3D';
     });
 
     conn.on('data', (data) => {
       if (!data) return;
       if (data.type === 'steer') {
         if (typeof data.angle === 'number') {
-          let angle = data.angle;
-          if (invertSteeringPC) angle = -angle;
-          carState.targetAngle = angle;
-          const deg = Math.round((angle * 180) / Math.PI);
+          let yaw = data.angle;
+          if (invertSteeringPC) yaw = -yaw;
+          carState.targetAngle = yaw;
+
+          const deg = Math.round((yaw * 180) / Math.PI);
           if (headingValue) headingValue.textContent = deg + '°';
+        }
+        if (typeof data.pitch === 'number') {
+          carState.targetPitch = data.pitch;
+        }
+        if (typeof data.roll === 'number') {
+          carState.targetRoll = data.roll;
         }
       } else if (data.type === 'horn') {
         soundEngine.playHorn();
@@ -1055,8 +1388,14 @@ function initHostPeer() {
           setTimeout(() => hornBubble.classList.remove('active'), 800);
         }
       } else if (data.type === 'god_motion') {
-        // Physical throw / lift received from phone accelerometer!
-        triggerGodLaunch(data.lift || 16.0, data.toss || 14.0);
+        // Forward push force from toddler shove
+        if (data.push && data.push > 0) {
+          triggerPushBoost(data.push);
+        }
+        // Vertical lift (only once on land!)
+        if (data.lift && data.lift > 0) {
+          triggerJump(data.lift);
+        }
       }
     });
 
@@ -1098,11 +1437,12 @@ if (invertTogglePCBtn) {
 // God Mode Controls in PC HUD
 const godModePCBtn = document.getElementById('godModePCBtn');
 const tossJumpPCBtn = document.getElementById('tossJumpPCBtn');
+const pushBoostPCBtn = document.getElementById('pushBoostPCBtn');
 
 function updateGodModePCUI() {
   if (godModePCBtn) {
     godModePCBtn.classList.toggle('active', godModeEnabled);
-    godModePCBtn.textContent = `🚀 God Mode: ${godModeEnabled ? 'ON' : 'OFF'}`;
+    godModePCBtn.textContent = `🚀 Toss/Boost: ${godModeEnabled ? 'ON' : 'OFF'}`;
   }
 }
 updateGodModePCUI();
@@ -1118,7 +1458,14 @@ if (godModePCBtn) {
 if (tossJumpPCBtn) {
   tossJumpPCBtn.addEventListener('click', () => {
     soundEngine.init(currentVehicleDef);
-    triggerGodLaunch(18.0, 15.0);
+    triggerJump(18.0);
+  });
+}
+
+if (pushBoostPCBtn) {
+  pushBoostPCBtn.addEventListener('click', () => {
+    soundEngine.init(currentVehicleDef);
+    triggerPushBoost(18.0);
   });
 }
 
@@ -1128,11 +1475,14 @@ window.addEventListener('keydown', (e) => {
   soundEngine.init(currentVehicleDef);
   keysDown[e.key.toLowerCase()] = true;
 
-  // Spacebar = Jump / Toss car into air!
+  // Spacebar = Jump (only once on land!)
   if (e.key === ' ') {
-    triggerGodLaunch(18.0, 14.0);
+    triggerJump(18.0);
   }
-
+  // Up arrow or W = Push Boost
+  if (e.key === 'arrowup' || e.key.toLowerCase() === 'w') {
+    triggerPushBoost(12.0);
+  }
   if (e.key.toLowerCase() === 'h') {
     soundEngine.playHorn();
     if (hornBubble) {
@@ -1167,7 +1517,7 @@ function handleKeyboardInput(dt) {
 }
 
 // ==========================================
-// 11. UI & VEHICLE SELECTOR MENU
+// 12. UI & VEHICLE SELECTOR MENU
 // ==========================================
 function rebuildVehicleMenu() {
   const vehicleMenuContainer = document.getElementById('vehicleMenu');
@@ -1235,7 +1585,7 @@ if (toggleDockBtn && bottomDock) {
 }
 
 // ==========================================
-// 12. MAIN ANIMATION LOOP
+// 13. MAIN ANIMATION LOOP
 // ==========================================
 const clock = new THREE.Clock();
 
@@ -1250,8 +1600,10 @@ function animate() {
   updateParticles(dt);
 
   if (speedValue) {
-    const totalSpd = carState.currentSpeed + carState.bonusSpeed;
-    speedValue.textContent = totalSpd.toFixed(1) + ' m/s';
+    const isUpright = Math.cos(carState.pitch) * Math.cos(carState.roll);
+    const wheelsOnLand = (carState.y <= 0.08) && (isUpright > 0.35);
+    const displaySpd = wheelsOnLand ? (carState.currentSpeed + carState.bonusSpeed) : carState.bonusSpeed * 0.7;
+    speedValue.textContent = displaySpd.toFixed(1) + ' m/s';
   }
 
   renderer.render(scene, camera);
