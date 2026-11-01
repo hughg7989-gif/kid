@@ -1,15 +1,17 @@
-/* Mobile Steering Controller Logic */
+/* Mobile Steering Controller Logic with Invert & Persistent Pairing */
 
 // --- State & Variables ---
-let zeroOffset = 0;       // Calibration heading in degrees
-let currentRawHeading = 0;// Most recently read physical compass heading
-let relativeAngleDeg = 0; // Relative angle (degrees) [-180, 180]
-let manualOffsetDeg = 0;  // Slider or manual tweak
+let zeroOffset = 0;              // Calibration heading in degrees
+let currentRawHeading = 0;       // Most recently read physical compass heading
+let relativeAngleDeg = 0;        // Relative angle (degrees) [-180, 180]
+let manualOffsetDeg = 0;         // Slider or manual tweak
+let invertSteering = localStorage.getItem('toycar_invert_steering') === '1'; // Invert toggle
 let hasSensors = false;
 let peer = null;
 let conn = null;
 let wakeLock = null;
 let sendInterval = null;
+let reconnectTimer = null;
 
 // Elements
 const calibrationOverlay = document.getElementById('calibrationOverlay');
@@ -22,16 +24,57 @@ const steerDeg = document.getElementById('steerDeg');
 const steerLabel = document.getElementById('steerLabel');
 const recenterBtn = document.getElementById('recenterBtn');
 const honkBtn = document.getElementById('honkBtn');
+const invertBtn = document.getElementById('invertBtn');
 const touchSlider = document.getElementById('touchSlider');
 const sliderValue = document.getElementById('sliderValue');
 const manualCodeModal = document.getElementById('manualCodeModal');
 const manualCodeInput = document.getElementById('manualCodeInput');
 const manualCodeSubmit = document.getElementById('manualCodeSubmit');
+const changeRoomBtn = document.getElementById('changeRoomBtn');
 
-// Parse URL params
+// 1. Persistent Pairing: Parse URL params or read remembered code
 const urlParams = new URLSearchParams(window.location.search);
 let targetPeerId = urlParams.get('peer');
 
+if (targetPeerId) {
+  // Normalize
+  if (!targetPeerId.startsWith('toycar-') && targetPeerId.length <= 6) {
+    targetPeerId = 'toycar-' + targetPeerId;
+  }
+  // Remember for future visits!
+  localStorage.setItem('toycar_last_peer', targetPeerId);
+} else {
+  // Check remembered peer ID
+  const savedPeer = localStorage.getItem('toycar_last_peer');
+  if (savedPeer) {
+    targetPeerId = savedPeer;
+  }
+}
+
+// Update Invert Button UI state
+function updateInvertBtnUI() {
+  if (!invertBtn) return;
+  if (invertSteering) {
+    invertBtn.classList.add('active');
+    invertBtn.innerHTML = '<span>🔄</span><span>INVERT: ON</span>';
+  } else {
+    invertBtn.classList.remove('active');
+    invertBtn.innerHTML = '<span>🔄</span><span>INVERT: OFF</span>';
+  }
+}
+updateInvertBtnUI();
+
+if (invertBtn) {
+  invertBtn.addEventListener('click', () => {
+    if (navigator.vibrate) navigator.vibrate(30);
+    invertSteering = !invertSteering;
+    localStorage.setItem('toycar_invert_steering', invertSteering ? '1' : '0');
+    updateInvertBtnUI();
+    computeRelativeAngle();
+  });
+}
+
+// Show manual code prompt only if completely unknown
 if (!targetPeerId) {
   if (manualCodeModal) manualCodeModal.style.display = 'flex';
   if (manualCodeSubmit) {
@@ -39,21 +82,28 @@ if (!targetPeerId) {
       const code = manualCodeInput.value.trim().toUpperCase();
       if (code) {
         targetPeerId = code.startsWith('toycar-') ? code : ('toycar-' + code);
+        localStorage.setItem('toycar_last_peer', targetPeerId);
         manualCodeModal.style.display = 'none';
         initPeerConnection();
       }
     });
   }
 } else {
-  if (!targetPeerId.startsWith('toycar-') && targetPeerId.length <= 6) {
-    targetPeerId = 'toycar-' + targetPeerId;
-  }
   initPeerConnection();
+}
+
+if (changeRoomBtn) {
+  changeRoomBtn.addEventListener('click', () => {
+    localStorage.removeItem('toycar_last_peer');
+    if (conn) conn.close();
+    if (manualCodeModal) manualCodeModal.style.display = 'flex';
+  });
 }
 
 // --- PeerJS WebRTC Connection ---
 function initPeerConnection() {
-  if (peerBadge) peerBadge.textContent = 'CAR: ' + targetPeerId.replace('toycar-', '');
+  const shortCode = targetPeerId.replace('toycar-', '');
+  if (peerBadge) peerBadge.textContent = 'ROOM: ' + shortCode;
   updateStatus('CONNECTING...', 'connecting');
 
   const myId = 'ctrl-' + Math.random().toString(36).substring(2, 8);
@@ -61,23 +111,30 @@ function initPeerConnection() {
     console.warn('PeerJS not loaded');
     return;
   }
+
   peer = new Peer(myId, {
     debug: 1,
   });
 
-  peer.on('open', (id) => {
+  peer.on('open', () => {
     connectToHost();
   });
 
   peer.on('error', (err) => {
     console.warn('Peer error:', err);
     if (err.type === 'peer-unavailable') {
-      updateStatus('CAR NOT FOUND', 'disconnected');
-      setTimeout(connectToHost, 3000);
+      updateStatus('CAR OFFLINE', 'disconnected');
+      scheduleReconnect();
     } else {
-      updateStatus('NET ERROR', 'disconnected');
+      updateStatus('RECONNECTING...', 'disconnected');
+      scheduleReconnect();
     }
   });
+}
+
+function scheduleReconnect() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connectToHost, 3000);
 }
 
 function connectToHost() {
@@ -89,20 +146,21 @@ function connectToHost() {
   });
 
   conn.on('open', () => {
-    updateStatus('CONNECTED & STEERING!', 'connected');
+    updateStatus('CONNECTED & STEERING! 🟢', 'connected');
     conn.send({ type: 'hello', client: 'mobile-controller' });
     startTransmissionLoop();
   });
 
   conn.on('close', () => {
-    updateStatus('DISCONNECTED', 'disconnected');
+    updateStatus('DISCONNECTED (Retrying...)', 'disconnected');
     clearInterval(sendInterval);
-    setTimeout(connectToHost, 2000);
+    scheduleReconnect();
   });
 
   conn.on('error', (err) => {
     console.warn('Connection error:', err);
     updateStatus('RECONNECTING...', 'disconnected');
+    scheduleReconnect();
   });
 }
 
@@ -135,6 +193,11 @@ function computeRelativeAngle() {
   let diff = currentRawHeading - zeroOffset;
   while (diff > 180) diff -= 360;
   while (diff < -180) diff += 360;
+
+  // Apply invert if toggled by user!
+  if (invertSteering) {
+    diff = -diff;
+  }
 
   let totalAngle = diff + manualOffsetDeg;
   while (totalAngle > 180) totalAngle -= 360;

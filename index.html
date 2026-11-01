@@ -67,7 +67,7 @@
         background: rgba(30, 41, 59, 0.95);
         border: 2px solid rgba(56, 189, 248, 0.3);
         border-radius: 28px;
-        padding: 32px 40px;
+        padding: 28px 36px;
         box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6), 0 0 40px rgba(56, 189, 248, 0.2);
         display: flex;
         flex-direction: column;
@@ -77,16 +77,16 @@
         width: 100%;
       }
       .game-title {
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 900;
         letter-spacing: -0.5px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         color: #38bdf8;
       }
       .pairing-subtitle {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 700;
         color: #f1f5f9;
         margin-top: 6px;
@@ -95,14 +95,14 @@
         font-size: 13px;
         color: #94a3b8;
         margin-top: 4px;
-        margin-bottom: 20px;
+        margin-bottom: 16px;
       }
       .qr-wrapper {
         background: #ffffff;
-        padding: 16px;
+        padding: 14px;
         border-radius: 20px;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-        margin-bottom: 18px;
+        margin-bottom: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -112,10 +112,10 @@
         align-items: center;
         gap: 10px;
         background: #0f172a;
-        padding: 10px 20px;
-        border-radius: 14px;
+        padding: 8px 18px;
+        border-radius: 12px;
         border: 1px solid rgba(56, 189, 248, 0.3);
-        font-size: 14px;
+        font-size: 13px;
         color: #94a3b8;
         font-weight: 600;
       }
@@ -125,21 +125,27 @@
         color: #38bdf8;
         letter-spacing: 3px;
       }
+      .remember-tip {
+        font-size: 11px;
+        color: #34d399;
+        margin-top: 6px;
+        font-weight: 600;
+      }
       .pairing-actions {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         width: 100%;
-        margin-top: 20px;
+        margin-top: 16px;
       }
       .btn-phone-link {
         background: #0284c7;
         color: #ffffff;
         text-decoration: none;
-        padding: 12px 18px;
+        padding: 11px 16px;
         border-radius: 12px;
         font-weight: 700;
-        font-size: 14px;
+        font-size: 13px;
         transition: background 0.15s;
         display: flex;
         align-items: center;
@@ -153,16 +159,25 @@
         background: transparent;
         color: #cbd5e1;
         border: 1px solid rgba(255, 255, 255, 0.2);
-        padding: 10px 18px;
+        padding: 9px 16px;
         border-radius: 12px;
         font-weight: 600;
-        font-size: 13px;
+        font-size: 12px;
         cursor: pointer;
         transition: all 0.15s;
       }
       .btn-desktop-mode:hover {
         background: rgba(255, 255, 255, 0.1);
         color: #ffffff;
+      }
+      .btn-reset-code {
+        background: transparent;
+        color: #64748b;
+        border: none;
+        font-size: 11px;
+        cursor: pointer;
+        margin-top: 4px;
+        text-decoration: underline;
       }
 
       /* In-Game Minimal HUD */
@@ -174,7 +189,7 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        padding: 20px;
+        padding: 16px 20px;
       }
       .hud-top {
         display: flex;
@@ -184,7 +199,7 @@
       }
       .hud-badge {
         pointer-events: auto;
-        background: rgba(15, 23, 42, 0.75);
+        background: rgba(15, 23, 42, 0.8);
         border: 1px solid rgba(255, 255, 255, 0.15);
         padding: 8px 16px;
         border-radius: 9999px;
@@ -204,11 +219,15 @@
         color: #f87171;
       }
       .score-badge {
-        font-size: 16px;
+        font-size: 15px;
         color: #facc15;
         font-weight: 800;
-        background: rgba(15, 23, 42, 0.8);
         border: 2px solid rgba(250, 204, 21, 0.4);
+      }
+      .vehicle-badge {
+        font-size: 14px;
+        font-weight: 800;
+        color: #38bdf8;
       }
       .hud-buttons {
         pointer-events: auto;
@@ -216,7 +235,7 @@
         gap: 8px;
       }
       .icon-btn {
-        background: rgba(15, 23, 42, 0.75);
+        background: rgba(15, 23, 42, 0.8);
         border: 1px solid rgba(255, 255, 255, 0.15);
         color: #ffffff;
         width: 38px;
@@ -231,29 +250,44 @@
         backdrop-filter: blur(4px);
       }
       .icon-btn:hover {
-        background: rgba(30, 41, 59, 0.9);
+        background: rgba(30, 41, 59, 0.95);
       }
       .icon-btn:active {
         transform: scale(0.92);
       }
 
       /* Bottom Sleek Dock (Collapsible) */
-      .bottom-dock {
+      .dock-container {
         pointer-events: auto;
         align-self: center;
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 20px;
-        padding: 10px 20px;
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 20px;
-        backdrop-filter: blur(8px);
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+        gap: 6px;
+        max-width: 90vw;
+      }
+      .bottom-dock {
+        background: rgba(15, 23, 42, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 24px;
+        padding: 12px 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
         transition: transform 0.3s ease;
       }
       .bottom-dock.collapsed {
-        transform: translateY(120%);
+        transform: translateY(125%);
+      }
+      .dock-row-stats {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        width: 100%;
+        justify-content: center;
       }
       .dock-item {
         display: flex;
@@ -265,33 +299,85 @@
         color: #94a3b8;
       }
       .dock-value {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 800;
         color: #38bdf8;
       }
+
+      /* Vehicle Selector Buttons */
+      .vehicle-menu {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 6px 10px;
+        border-radius: 16px;
+      }
+      .vehicle-select-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #f1f5f9;
+        padding: 6px 14px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+      }
+      .vehicle-select-btn:hover {
+        background: rgba(255, 255, 255, 0.18);
+      }
+      .vehicle-select-btn.active {
+        background: linear-gradient(135deg, #0284c7, #2563eb);
+        border-color: #38bdf8;
+        color: #ffffff;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+      }
+      .v-icon {
+        font-size: 16px;
+      }
+
+      .btn-invert-pc {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: #cbd5e1;
+        padding: 6px 12px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .btn-invert-pc.active {
+        background: #ec4899;
+        color: #ffffff;
+        border-color: #f472b6;
+      }
+
       .dock-toggle-btn {
         pointer-events: auto;
-        align-self: center;
-        margin-bottom: 6px;
-        background: rgba(15, 23, 42, 0.65);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.12);
         color: #cbd5e1;
         font-size: 12px;
         font-weight: 700;
-        padding: 4px 12px;
+        padding: 5px 14px;
         border-radius: 9999px;
         cursor: pointer;
       }
 
-      /* Horn pop animation */
+      /* Horn comic bubble popup */
       .horn-bubble {
         position: absolute;
-        top: 40%;
+        top: 38%;
         left: 50%;
         transform: translate(-50%, -50%) scale(0);
         background: #f59e0b;
         color: #000;
-        font-size: 36px;
+        font-size: 34px;
         font-weight: 900;
         padding: 12px 28px;
         border-radius: 30px;
@@ -317,11 +403,11 @@
       <div class="pairing-card">
         <div class="game-title">
           <span>🏎️</span>
-          <span>TODDLER TOY CAR 3D</span>
+          <span>TODDLER TOY VEHICLES 3D</span>
         </div>
-        <div class="pairing-subtitle">Scan with your phone to start driving!</div>
+        <div class="pairing-subtitle">Scan once — phone remembers connection!</div>
         <p class="pairing-desc">
-          Mount phone <strong>flat</strong> on your physical toy car. Rotate the physical car to steer!
+          Mount phone <strong>flat</strong> on the toy vehicle. Drive infinitely down roads and across farm meadows!
         </p>
 
         <!-- QR Code container -->
@@ -333,6 +419,7 @@
           <span>ROOM CODE:</span>
           <span id="roomCodeVal" class="room-code-val">----</span>
         </div>
+        <div class="remember-tip">✓ Permanent room code: no need to scan next time!</div>
 
         <div class="pairing-actions">
           <a id="phoneControllerLink" class="btn-phone-link" href="#" target="_blank">
@@ -342,6 +429,7 @@
           <button id="desktopModeBtn" class="btn-desktop-mode">
             🎮 Play with Keyboard (Left / Right Arrows)
           </button>
+          <button id="resetCodeBtn" class="btn-reset-code">Generate New Room Code</button>
         </div>
       </div>
     </div>
@@ -354,6 +442,10 @@
           <span id="connStatusText">WAITING FOR PHONE...</span>
         </div>
 
+        <div class="hud-badge vehicle-badge">
+          <span id="vehicleNameBadge">🏎️ Toy Race Car</span>
+        </div>
+
         <div class="hud-badge score-badge">
           <span>⭐</span>
           <span id="scoreText">0 Smashed!</span>
@@ -361,25 +453,32 @@
 
         <div class="hud-buttons">
           <button id="audioToggleBtn" class="icon-btn" title="Toggle Sound">🔊</button>
-          <button id="cameraToggleBtn" class="icon-btn" title="Change Camera View">📷</button>
           <button id="reopenPairingBtn" class="icon-btn" title="Pair Phone">📱</button>
         </div>
       </div>
 
-      <div style="display: flex; flex-direction: column; align-items: center;">
-        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Controls Info</button>
+      <div class="dock-container">
+        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles &amp; Controls</button>
         <div id="bottomDock" class="bottom-dock">
-          <div class="dock-item">
-            <span>SPEED</span>
-            <span id="speedValue" class="dock-value">10.0 m/s</span>
+          <!-- Vehicle Selector Menu -->
+          <div id="vehicleMenu" class="vehicle-menu">
+            <!-- Dynamically populated from /src/vehicles/index.js -->
           </div>
-          <div class="dock-item">
-            <span>STEERING HEADING</span>
-            <span id="headingValue" class="dock-value">0°</span>
-          </div>
-          <div class="dock-item">
-            <span>MODE</span>
-            <span id="inputModeValue" class="dock-value">Gentle Cruise</span>
+
+          <div class="dock-row-stats">
+            <div class="dock-item">
+              <span>SPEED</span>
+              <span id="speedValue" class="dock-value">11.0 m/s</span>
+            </div>
+            <div class="dock-item">
+              <span>STEERING HEADING</span>
+              <span id="headingValue" class="dock-value">0°</span>
+            </div>
+            <div class="dock-item">
+              <span>MODE</span>
+              <span id="inputModeValue" class="dock-value">Endless Cruise</span>
+            </div>
+            <button id="invertTogglePCBtn" class="btn-invert-pc">🔄 Invert Steering: OFF</button>
           </div>
         </div>
       </div>
