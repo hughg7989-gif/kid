@@ -1,4 +1,4 @@
-/* Mobile Steering Controller Logic with 3D Orientation, Push Boost & Persistent Pairing */
+/* Mobile Steering Controller Logic with 3D Orientation, Top-Down Game View & Remote Control */
 
 // --- State & Variables ---
 let zeroAlpha = 0;               // Calibration yaw (degrees)
@@ -10,11 +10,25 @@ let currentRawBeta = 0;
 let currentRawGamma = 0;
 
 let relativeYawDeg = 0;          // Relative yaw [-180, 180]
-let relativePitchRad = 0;        // Relative pitch (front-back tilt)
-let relativeRollRad = 0;         // Relative roll (left-right tilt)
+let relativePitchRad = 0;        // Relative pitch
+let relativeRollRad = 0;         // Relative roll
 let manualOffsetDeg = 0;         // Touch slider tweak
 
 let invertSteering = localStorage.getItem('toycar_invert_steering') === '1';
+
+// View Mode: 'top_down' (default for kid) or 'sensors' (for parent/tuning)
+let currentViewMode = localStorage.getItem('toycar_phone_view') || 'top_down';
+
+// Toddler Screen Lock
+let isScreenLocked = localStorage.getItem('toycar_phone_locked') !== '0';
+
+// Active vehicle info received from PC
+let currentVehicleInfo = {
+  id: 'car',
+  name: 'Toy Sports Car',
+  icon: '🏎️',
+  baseSpeed: 11.0,
+};
 
 // God Mode / Physical Lift & Toss Settings
 let godModeEnabled = localStorage.getItem('toycar_god_mode') !== '0';
@@ -32,6 +46,18 @@ let reconnectTimer = null;
 let lastMotionTime = 0;
 
 // Elements
+const topDownView = document.getElementById('topDownView');
+const topDownCanvas = document.getElementById('topDownCanvas');
+const topDownStatusText = document.getElementById('topDownStatusText');
+const toddlerLockBtn = document.getElementById('toddlerLockBtn');
+const lockStatusText = document.getElementById('lockStatusText');
+const btnSwitchToSensors = document.getElementById('btnSwitchToSensors');
+const topDownVehicleIcon = document.getElementById('topDownVehicleIcon');
+const topDownSpeedText = document.getElementById('topDownSpeedText');
+const topDownHonkBtn = document.getElementById('topDownHonkBtn');
+
+const sensorsView = document.getElementById('sensorsView');
+const btnBackToTopDown = document.getElementById('btnBackToTopDown');
 const calibrationOverlay = document.getElementById('calibrationOverlay');
 const startCalibrateBtn = document.getElementById('startCalibrateBtn');
 const statusBadge = document.getElementById('statusBadge');
@@ -70,7 +96,92 @@ if (targetPeerId) {
   }
 }
 
-// Invert Button UI
+// 2. View Mode Switcher
+function updateViewModeUI() {
+  if (currentViewMode === 'top_down') {
+    if (topDownView) topDownView.style.display = 'flex';
+    if (sensorsView) sensorsView.style.display = 'none';
+  } else {
+    if (topDownView) topDownView.style.display = 'none';
+    if (sensorsView) sensorsView.style.display = 'flex';
+  }
+  localStorage.setItem('toycar_phone_view', currentViewMode);
+}
+
+if (btnSwitchToSensors) {
+  btnSwitchToSensors.addEventListener('click', () => {
+    if (isScreenLocked) {
+      flashLockHint();
+      return;
+    }
+    currentViewMode = 'sensors';
+    updateViewModeUI();
+  });
+}
+
+if (btnBackToTopDown) {
+  btnBackToTopDown.addEventListener('click', () => {
+    currentViewMode = 'top_down';
+    updateViewModeUI();
+  });
+}
+
+// 3. Toddler Lock Logic
+function updateLockUI() {
+  if (!toddlerLockBtn) return;
+  if (isScreenLocked) {
+    toddlerLockBtn.classList.remove('unlocked');
+    if (lockStatusText) lockStatusText.textContent = 'LOCKED';
+    toddlerLockBtn.querySelector('span:first-child').textContent = '🔒';
+  } else {
+    toddlerLockBtn.classList.add('unlocked');
+    if (lockStatusText) lockStatusText.textContent = 'UNLOCKED';
+    toddlerLockBtn.querySelector('span:first-child').textContent = '🔓';
+  }
+}
+
+function flashLockHint() {
+  if (navigator.vibrate) navigator.vibrate(40);
+  if (lockStatusText) {
+    const original = lockStatusText.textContent;
+    lockStatusText.textContent = 'HOLD 2s TO UNLOCK';
+    setTimeout(() => {
+      lockStatusText.textContent = original;
+    }, 1500);
+  }
+}
+
+let lockPressTimer = null;
+if (toddlerLockBtn) {
+  toddlerLockBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    lockPressTimer = setTimeout(() => {
+      isScreenLocked = !isScreenLocked;
+      localStorage.setItem('toycar_phone_locked', isScreenLocked ? '1' : '0');
+      updateLockUI();
+      if (navigator.vibrate) navigator.vibrate([60, 40, 80]);
+    }, 1400);
+  });
+
+  toddlerLockBtn.addEventListener('touchend', () => {
+    clearTimeout(lockPressTimer);
+  });
+
+  toddlerLockBtn.addEventListener('click', () => {
+    if (isScreenLocked) {
+      flashLockHint();
+    } else {
+      isScreenLocked = true;
+      localStorage.setItem('toycar_phone_locked', '1');
+      updateLockUI();
+    }
+  });
+}
+
+updateLockUI();
+updateViewModeUI();
+
+// 4. Invert Button UI
 function updateInvertBtnUI() {
   if (!invertBtn) return;
   if (invertSteering) {
@@ -106,11 +217,11 @@ function updateGodModeUI() {
   }
   if (toggleLiftBtn) {
     toggleLiftBtn.classList.toggle('active', liftForceEnabled);
-    toggleLiftBtn.textContent = `Lift/Jump: ${liftForceEnabled ? 'ON' : 'OFF'}`;
+    toggleLiftBtn.textContent = `Lift: ${liftForceEnabled ? 'ON' : 'OFF'}`;
   }
   if (toggleTossBtn) {
     toggleTossBtn.classList.toggle('active', tossForceEnabled);
-    toggleTossBtn.textContent = `Push Boost: ${tossForceEnabled ? 'ON' : 'OFF'}`;
+    toggleTossBtn.textContent = `Push: ${tossForceEnabled ? 'ON' : 'OFF'}`;
   }
 }
 updateGodModeUI();
@@ -166,7 +277,7 @@ if (changeRoomBtn) {
   });
 }
 
-// --- PeerJS WebRTC Connection ---
+// 5. PeerJS WebRTC Connection
 function initPeerConnection() {
   const shortCode = targetPeerId.replace('toycar-', '');
   if (peerBadge) peerBadge.textContent = 'ROOM: ' + shortCode;
@@ -188,13 +299,8 @@ function initPeerConnection() {
 
   peer.on('error', (err) => {
     console.warn('Peer error:', err);
-    if (err.type === 'peer-unavailable') {
-      updateStatus('CAR OFFLINE', 'disconnected');
-      scheduleReconnect();
-    } else {
-      updateStatus('RECONNECTING...', 'disconnected');
-      scheduleReconnect();
-    }
+    updateStatus('RECONNECTING...', 'disconnected');
+    scheduleReconnect();
   });
 }
 
@@ -212,9 +318,40 @@ function connectToHost() {
   });
 
   conn.on('open', () => {
-    updateStatus('CONNECTED & STEERING! 🟢', 'connected');
+    updateStatus('CONNECTED! 🟢', 'connected');
     conn.send({ type: 'hello', client: 'mobile-controller' });
     startTransmissionLoop();
+  });
+
+  // Listen for parent remote commands & vehicle info from PC!
+  conn.on('data', (data) => {
+    if (!data) return;
+    if (data.type === 'parent_command') {
+      if (data.action === 'toggle_view') {
+        currentViewMode = data.mode || (currentViewMode === 'top_down' ? 'sensors' : 'top_down');
+        updateViewModeUI();
+      } else if (data.action === 'toggle_invert') {
+        invertSteering = typeof data.invert === 'boolean' ? data.invert : !invertSteering;
+        localStorage.setItem('toycar_invert_steering', invertSteering ? '1' : '0');
+        updateInvertBtnUI();
+        compute3DOrientation();
+      } else if (data.action === 'recenter') {
+        calibrateSensors();
+        if (navigator.vibrate) navigator.vibrate([30, 30, 30]);
+      } else if (data.action === 'toggle_lock') {
+        isScreenLocked = typeof data.locked === 'boolean' ? data.locked : !isScreenLocked;
+        localStorage.setItem('toycar_phone_locked', isScreenLocked ? '1' : '0');
+        updateLockUI();
+      } else if (data.action === 'honk') {
+        triggerHonk();
+      } else if (data.action === 'update_vehicle') {
+        if (data.vehicle) {
+          currentVehicleInfo = data.vehicle;
+          if (topDownVehicleIcon) topDownVehicleIcon.textContent = data.vehicle.icon || '🏎️';
+          if (topDownSpeedText) topDownSpeedText.textContent = (data.vehicle.baseSpeed || 11.0).toFixed(1) + ' m/s';
+        }
+      }
+    }
   });
 
   conn.on('close', () => {
@@ -232,10 +369,11 @@ function connectToHost() {
 
 function updateStatus(text, state) {
   if (statusText) statusText.textContent = text;
+  if (topDownStatusText) topDownStatusText.textContent = text;
   if (statusBadge) statusBadge.className = 'status-badge ' + state;
 }
 
-// --- Full 3D Orientation (Yaw, Pitch, Roll) ---
+// 6. Full 3D Orientation (Yaw, Pitch, Roll) with Deadzone Calibration
 function handleOrientation(e) {
   hasSensors = true;
 
@@ -274,7 +412,6 @@ function compute3DOrientation() {
   relativeYawDeg = totalYaw;
 
   // 2. Pitch & Roll (relative to calibrated flat position)
-  // When kid tilts or flips phone upside down, the 3D car reflects that!
   let diffBetaDeg = currentRawBeta - zeroBeta;
   let diffGammaDeg = currentRawGamma - zeroGamma;
 
@@ -299,8 +436,7 @@ function renderDial() {
     steerDeg.textContent = (rounded > 0 ? '+' : '') + rounded + '°';
   }
 
-  // Check if car is upside down or tilted in an accident
-  const isUpsideDown = Math.abs(relativeRollRad) > 1.4 || Math.abs(relativePitchRad) > 1.4;
+  const isUpsideDown = Math.abs(relativeRollRad) > 1.3 || Math.abs(relativePitchRad) > 1.3;
 
   if (steerLabel) {
     if (isUpsideDown) {
@@ -319,7 +455,7 @@ function renderDial() {
   }
 }
 
-// --- Motion: Forward Push Boost & Vertical Lift Detection ---
+// 7. Motion: Forward Push Boost & Vertical Lift
 function handleMotion(e) {
   if (!godModeEnabled) return;
 
@@ -343,9 +479,7 @@ function handleMotion(e) {
   let liftForce = 0;
   let pushForce = 0;
 
-  // 1. Forward Push Force: when kid shoves the phone forward, give a forward speed boost!
   if (tossForceEnabled) {
-    // When invert is active (phone turned 180°), forward push is opposite along phone Y
     const forwardAy = invertSteering ? -ay : ay;
     const planarJerk = Math.hypot(ax, ay);
 
@@ -355,7 +489,6 @@ function handleMotion(e) {
     }
   }
 
-  // 2. Vertical Lift: when kid lifts phone off the table/car
   if (liftForceEnabled) {
     const verticalMag = Math.abs(az);
     if (verticalMag > 4.8) {
@@ -377,7 +510,7 @@ function handleMotion(e) {
   }
 }
 
-// --- Continuous Transmission at 45Hz ---
+// 8. Continuous Transmission Loop at 40Hz
 function startTransmissionLoop() {
   clearInterval(sendInterval);
   sendInterval = setInterval(() => {
@@ -394,7 +527,7 @@ function startTransmissionLoop() {
   }, 25);
 }
 
-// --- Wake Lock ---
+// 9. Wake Lock
 async function requestWakeLock() {
   try {
     if ('wakeLock' in navigator) {
@@ -414,7 +547,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// --- Calibrate / Re-Center Function ---
+// 10. Calibration
 function calibrateSensors() {
   zeroAlpha = currentRawAlpha;
   zeroBeta = currentRawBeta;
@@ -425,7 +558,6 @@ function calibrateSensors() {
   compute3DOrientation();
 }
 
-// Start & Calibrate Button
 if (startCalibrateBtn) {
   startCalibrateBtn.addEventListener('click', async () => {
     if (navigator.vibrate) navigator.vibrate(50);
@@ -450,7 +582,6 @@ if (startCalibrateBtn) {
     window.addEventListener('deviceorientation', handleOrientation, true);
     window.addEventListener('devicemotion', handleMotion, true);
 
-    // Initial calibration
     calibrateSensors();
     requestWakeLock();
 
@@ -458,7 +589,6 @@ if (startCalibrateBtn) {
   });
 }
 
-// Re-Center / Calibrate Button
 if (recenterBtn) {
   recenterBtn.addEventListener('click', () => {
     if (navigator.vibrate) navigator.vibrate([25, 50, 25]);
@@ -466,17 +596,16 @@ if (recenterBtn) {
   });
 }
 
-// Honk Horn Button
-if (honkBtn) {
-  honkBtn.addEventListener('click', () => {
-    if (navigator.vibrate) navigator.vibrate([80, 40, 100]);
-    if (conn && conn.open) {
-      conn.send({ type: 'horn', timestamp: Date.now() });
-    }
-  });
+function triggerHonk() {
+  if (navigator.vibrate) navigator.vibrate([80, 40, 100]);
+  if (conn && conn.open) {
+    conn.send({ type: 'horn', timestamp: Date.now() });
+  }
 }
 
-// Test Push / Jump Button
+if (honkBtn) honkBtn.addEventListener('click', triggerHonk);
+if (topDownHonkBtn) topDownHonkBtn.addEventListener('click', triggerHonk);
+
 if (tossTestBtn) {
   tossTestBtn.addEventListener('click', () => {
     if (navigator.vibrate) navigator.vibrate([50, 20, 60]);
@@ -491,7 +620,6 @@ if (tossTestBtn) {
   });
 }
 
-// Touch Slider Fallback
 if (touchSlider) {
   touchSlider.addEventListener('input', (e) => {
     manualOffsetDeg = parseFloat(e.target.value);
@@ -499,3 +627,258 @@ if (touchSlider) {
     compute3DOrientation();
   });
 }
+
+// ==========================================
+// 11. TOP-DOWN 2D CAR DRIVING SIMULATION
+// ==========================================
+let roadScrollOffset = 0;
+let lastFrameTime = performance.now();
+
+function setupTopDownCanvas() {
+  if (!topDownCanvas) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  topDownCanvas.width = window.innerWidth * dpr;
+  topDownCanvas.height = window.innerHeight * dpr;
+}
+
+window.addEventListener('resize', setupTopDownCanvas);
+setupTopDownCanvas();
+
+// Tap anywhere on canvas to honk
+if (topDownCanvas) {
+  topDownCanvas.addEventListener('pointerdown', (e) => {
+    // Avoid clicking buttons
+    if (e.target !== topDownCanvas) return;
+    triggerHonk();
+  });
+}
+
+function drawTopDownCar(ctx, cx, cy, vehicleId) {
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // Top-down rotation matching compass heading!
+  const rotationRad = (relativeYawDeg * Math.PI) / 180;
+  ctx.rotate(rotationRad);
+
+  // Drop shadow
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+  ctx.beginPath();
+  ctx.roundRect(-28, -50, 56, 100, 14);
+  ctx.fill();
+
+  if (vehicleId === 'bus') {
+    // Yellow School Bus
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(-29, -36, 7, 20); // Wheels
+    ctx.fillRect(22, -36, 7, 20);
+    ctx.fillRect(-29, 22, 7, 20);
+    ctx.fillRect(22, 22, 7, 20);
+
+    // Body
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.roundRect(-25, -55, 50, 110, 12);
+    ctx.fill();
+
+    // Windshield & Windows
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-20, -50, 40, 14); // Front windshield
+    for (let wy = -28; wy <= 34; wy += 14) {
+      ctx.fillRect(-22, wy, 8, 8);
+      ctx.fillRect(14, wy, 8, 8);
+    }
+    // Headlights
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(-20, -56, 8, 4);
+    ctx.fillRect(12, -56, 8, 4);
+  } else if (vehicleId === 'truck') {
+    // Heavy Dump Truck
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(-28, -38, 8, 20);
+    ctx.fillRect(20, -38, 8, 20);
+    ctx.fillRect(-28, 12, 8, 18);
+    ctx.fillRect(20, 12, 8, 18);
+    ctx.fillRect(-28, 32, 8, 18);
+    ctx.fillRect(20, 32, 8, 18);
+
+    // Cabin
+    ctx.fillStyle = '#3b82f6';
+    ctx.beginPath();
+    ctx.roundRect(-24, -52, 48, 36, 8);
+    ctx.fill();
+
+    // Windshield
+    ctx.fillStyle = '#bae6fd';
+    ctx.fillRect(-18, -48, 36, 12);
+
+    // Cargo Bed
+    ctx.fillStyle = '#cbd5e1';
+    ctx.beginPath();
+    ctx.roundRect(-23, -12, 46, 64, 4);
+    ctx.fill();
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(-18, -8, 36, 56);
+  } else if (vehicleId === 'tractor') {
+    // Farm Tractor
+    // Big rear wheels
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(-34, 10, 12, 34);
+    ctx.fillRect(22, 10, 12, 34);
+    // Small front wheels
+    ctx.fillRect(-24, -40, 8, 18);
+    ctx.fillRect(16, -40, 8, 18);
+
+    // Engine Hood
+    ctx.fillStyle = '#22c55e';
+    ctx.beginPath();
+    ctx.roundRect(-16, -46, 32, 54, 8);
+    ctx.fill();
+
+    // Driver Seat / Cabin
+    ctx.fillStyle = '#15803d';
+    ctx.fillRect(-18, 10, 36, 30);
+
+    // Exhaust Pipe
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.arc(10, -28, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (vehicleId === 'excavator') {
+    // Yellow Excavator with Tracks
+    ctx.fillStyle = '#0f172a'; // Tracks
+    ctx.fillRect(-30, -48, 12, 96);
+    ctx.fillRect(18, -48, 12, 96);
+
+    // Center Cabin
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.roundRect(-16, -26, 32, 52, 6);
+    ctx.fill();
+
+    // Glass
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-14, -22, 14, 18);
+
+    // Boom arm
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(2, -44, 8, 36);
+
+    // Bucket
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(-4, -58, 20, 14);
+  } else {
+    // Default Toy Sports Car
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(-28, -32, 7, 18);
+    ctx.fillRect(21, -32, 7, 18);
+    ctx.fillRect(-28, 18, 7, 18);
+    ctx.fillRect(21, 18, 7, 18);
+
+    // Body
+    ctx.fillStyle = '#f43f5e';
+    ctx.beginPath();
+    ctx.roundRect(-23, -48, 46, 96, 14);
+    ctx.fill();
+
+    // Windshield
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.roundRect(-17, -26, 34, 22, 6);
+    ctx.fill();
+
+    // Rear Spoiler
+    ctx.fillStyle = '#be123c';
+    ctx.fillRect(-21, 38, 42, 8);
+
+    // Headlights
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(-18, -49, 8, 4);
+    ctx.fillRect(10, -49, 8, 4);
+  }
+
+  // Front Heading Arrow indicator
+  ctx.fillStyle = '#38bdf8';
+  ctx.beginPath();
+  ctx.moveTo(0, -70);
+  ctx.lineTo(-10, -56);
+  ctx.lineTo(10, -56);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function renderTopDownLoop(timestamp) {
+  requestAnimationFrame(renderTopDownLoop);
+  if (!topDownCanvas || currentViewMode !== 'top_down') return;
+
+  const dt = Math.min((timestamp - lastFrameTime) / 1000, 0.1);
+  lastFrameTime = timestamp;
+
+  const ctx = topDownCanvas.getContext('2d');
+  const w = topDownCanvas.width;
+  const h = topDownCanvas.height;
+
+  // Cruise forward scroll
+  const speed = (currentVehicleInfo.baseSpeed || 11.0) * 16.0;
+  roadScrollOffset = (roadScrollOffset + speed * dt) % 120;
+
+  // 1. Meadow green ground
+  ctx.fillStyle = '#86efac';
+  ctx.fillRect(0, 0, w, h);
+
+  // 2. Checker grass tile accents
+  ctx.fillStyle = '#6ee7b7';
+  const tileSize = 60;
+  for (let x = 0; x < w; x += tileSize) {
+    for (let y = (roadScrollOffset % tileSize) - tileSize; y < h; y += tileSize) {
+      if (((x / tileSize) + Math.floor(y / tileSize)) % 2 === 0) {
+        ctx.fillRect(x, y, tileSize, tileSize);
+      }
+    }
+  }
+
+  // 3. Wide Asphalt Road centered vertically
+  const roadWidth = Math.min(w * 0.65, 340);
+  const roadX = (w - roadWidth) / 2;
+
+  // Curbs
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(roadX - 8, 0, roadWidth + 16, h);
+
+  // Asphalt
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(roadX, 0, roadWidth, h);
+
+  // White edge lines
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(roadX + 8, 0, 4, h);
+  ctx.fillRect(roadX + roadWidth - 12, 0, 4, h);
+
+  // Yellow dashed centerline
+  ctx.fillStyle = '#facc15';
+  const dashLength = 40;
+  const gap = 30;
+  const totalDash = dashLength + gap;
+  const startY = (roadScrollOffset % totalDash) - totalDash;
+  for (let y = startY; y < h; y += totalDash) {
+    ctx.fillRect(w / 2 - 3, y, 6, dashLength);
+  }
+
+  // 4. Little roadside trees
+  ctx.fillStyle = '#15803d';
+  for (let y = ((roadScrollOffset * 0.8) % 180) - 180; y < h; y += 180) {
+    ctx.beginPath();
+    ctx.arc(roadX - 35, y + 50, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(roadX + roadWidth + 35, y + 110, 16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 5. Draw Selected Top-Down Car in the middle of phone screen
+  drawTopDownCar(ctx, w / 2, h / 2, currentVehicleInfo.id);
+}
+
+requestAnimationFrame(renderTopDownLoop);

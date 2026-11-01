@@ -391,6 +391,126 @@
       border: none;
       cursor: pointer;
     }
+
+    /* Top-Down Mirror Canvas View */
+    #topDownView {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      background: #86efac;
+      overflow: hidden;
+    }
+    #topDownCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    .top-down-hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .top-down-hud > * {
+      pointer-events: auto;
+    }
+    .pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 800;
+      background: rgba(15, 23, 42, 0.85);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .lock-pill {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(234, 179, 8, 0.5);
+      color: #facc15;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .lock-pill.unlocked {
+      border-color: #34d399;
+      color: #34d399;
+    }
+    .btn-top-gear {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #cbd5e1;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .top-down-bottom {
+      position: absolute;
+      bottom: 12px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 16px;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .top-down-bottom > * {
+      pointer-events: auto;
+    }
+    .btn-top-honk {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: white;
+      border: 3px solid #fff;
+      border-radius: 50px;
+      padding: 12px 22px;
+      font-size: 15px;
+      font-weight: 900;
+      box-shadow: 0 8px 24px rgba(245, 158, 11, 0.6);
+      cursor: pointer;
+    }
+    .btn-top-honk:active {
+      transform: scale(0.95);
+    }
+
+    /* Sensors & Settings View */
+    #sensorsView {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #0f172a 100%);
+      overflow-y: auto;
+    }
   </style>
 </head>
 <body>
@@ -420,76 +540,107 @@
     </div>
   </div>
 
-  <!-- Main Controller View -->
-  <header>
-    <div id="statusBadge" class="status-badge">
-      <span class="status-dot"></span>
-      <span id="statusText">CONNECTING...</span>
-    </div>
-    <div class="header-right">
-      <div id="peerBadge" class="peer-badge">ROOM: ----</div>
-      <button id="changeRoomBtn" class="btn-room-change" title="Switch to another PC game">Change</button>
-    </div>
-  </header>
+  <!-- 1. TOP-DOWN LIVE CAR VIEW (Default for Toddler) -->
+  <div id="topDownView">
+    <canvas id="topDownCanvas"></canvas>
 
-  <!-- God Mode Sub-Toggles -->
-  <div class="god-toolbar">
-    <button id="toggleLiftBtn" class="sub-toggle-btn active">Lift (Up/Down): ON</button>
-    <button id="toggleTossBtn" class="sub-toggle-btn active">Toss (Push): ON</button>
-    <button id="tossTestBtn" class="sub-toggle-btn" style="color: #facc15; border-color: #facc15;">🚀 Jump / Toss!</button>
+    <div class="top-down-hud">
+      <div id="topDownStatus" class="pill-badge">
+        <span class="status-dot"></span>
+        <span id="topDownStatusText">CONNECTING...</span>
+      </div>
+
+      <button id="toddlerLockBtn" class="lock-pill" title="Screen Locked for Toddler">
+        <span>🔒</span>
+        <span id="lockStatusText">LOCKED</span>
+      </button>
+
+      <button id="btnSwitchToSensors" class="btn-top-gear" title="Switch to Sensor Settings">⚙️</button>
+    </div>
+
+    <div class="top-down-bottom">
+      <div id="topDownSpeedBadge" class="pill-badge" style="background: rgba(15, 23, 42, 0.9); font-size: 13px;">
+        <span id="topDownVehicleIcon">🏎️</span>
+        <span id="topDownSpeedText">11.0 m/s</span>
+      </div>
+
+      <button id="topDownHonkBtn" class="btn-top-honk">🎺 HONK!</button>
+    </div>
   </div>
 
-  <main>
-    <div class="compass-container">
-      <div class="compass-ring"></div>
-      <div class="compass-ticks"></div>
-      <div id="compassArrowWrap" class="compass-arrow-wrap">
-        <div class="compass-arrow">
-          <div style="color: #38bdf8; font-weight: 900; font-size: 12px;">▲ FWD</div>
-          <div class="toy-car-graphic">
-            <div class="wheel fl"></div>
-            <div class="wheel fr"></div>
-            <div class="wheel bl"></div>
-            <div class="wheel br"></div>
+  <!-- 2. SENSORS & SETTINGS VIEW (For Parent / Tuning) -->
+  <div id="sensorsView">
+    <header>
+      <div id="statusBadge" class="status-badge">
+        <span class="status-dot"></span>
+        <span id="statusText">CONNECTING...</span>
+      </div>
+      <div class="header-right">
+        <button id="btnBackToTopDown" class="btn-room-change" style="background: #0284c7; color: #fff; border: none; font-weight: 800;">🚗 Top-Down View</button>
+        <div id="peerBadge" class="peer-badge">ROOM: ----</div>
+        <button id="changeRoomBtn" class="btn-room-change" title="Switch Room">Change</button>
+      </div>
+    </header>
+
+    <!-- God Mode Sub-Toggles -->
+    <div class="god-toolbar">
+      <button id="toggleLiftBtn" class="sub-toggle-btn active">Lift: ON</button>
+      <button id="toggleTossBtn" class="sub-toggle-btn active">Push: ON</button>
+      <button id="tossTestBtn" class="sub-toggle-btn" style="color: #facc15; border-color: #facc15;">🚀 Jump / Toss!</button>
+    </div>
+
+    <main>
+      <div class="compass-container">
+        <div class="compass-ring"></div>
+        <div class="compass-ticks"></div>
+        <div id="compassArrowWrap" class="compass-arrow-wrap">
+          <div class="compass-arrow">
+            <div style="color: #38bdf8; font-weight: 900; font-size: 12px;">▲ FWD</div>
+            <div class="toy-car-graphic">
+              <div class="wheel fl"></div>
+              <div class="wheel fr"></div>
+              <div class="wheel bl"></div>
+              <div class="wheel br"></div>
+            </div>
+            <div style="color: rgba(255,255,255,0.3); font-size: 10px;">▼</div>
           </div>
-          <div style="color: rgba(255,255,255,0.3); font-size: 10px;">▼</div>
         </div>
       </div>
-    </div>
 
-    <div class="steer-readout">
-      <div id="steerDeg" class="steer-deg">0°</div>
-      <div id="steerLabel" class="steer-label">STRAIGHT AHEAD</div>
-    </div>
-
-    <!-- Manual fallback slider -->
-    <div class="touch-fallback">
-      <div class="touch-fallback-header">
-        <span>Touch / Fine Adjust</span>
-        <span id="sliderValue">0°</span>
+      <div class="steer-readout">
+        <div id="steerDeg" class="steer-deg">0°</div>
+        <div id="steerLabel" class="steer-label">STRAIGHT AHEAD</div>
       </div>
-      <input type="range" id="touchSlider" class="touch-slider" min="-180" max="180" value="0" />
-    </div>
-  </main>
 
-  <footer>
-    <button id="recenterBtn" class="action-btn btn-recenter">
-      <span>🎯</span>
-      <span>RE-CENTER</span>
-    </button>
-    <button id="invertBtn" class="action-btn btn-invert">
-      <span>🔄</span>
-      <span>INVERT</span>
-    </button>
-    <button id="godModeBtn" class="action-btn btn-god active">
-      <span>🚀</span>
-      <span>GOD MODE</span>
-    </button>
-    <button id="honkBtn" class="action-btn btn-honk">
-      <span>🎺</span>
-      <span>HONK!</span>
-    </button>
-  </footer>
+      <!-- Manual fallback slider -->
+      <div class="touch-fallback">
+        <div class="touch-fallback-header">
+          <span>Touch / Fine Adjust</span>
+          <span id="sliderValue">0°</span>
+        </div>
+        <input type="range" id="touchSlider" class="touch-slider" min="-180" max="180" value="0" />
+      </div>
+    </main>
+
+    <footer>
+      <button id="recenterBtn" class="action-btn btn-recenter">
+        <span>🎯</span>
+        <span>RE-CENTER</span>
+      </button>
+      <button id="invertBtn" class="action-btn btn-invert">
+        <span>🔄</span>
+        <span>INVERT</span>
+      </button>
+      <button id="godModeBtn" class="action-btn btn-god active">
+        <span>🚀</span>
+        <span>GOD MODE</span>
+      </button>
+      <button id="honkBtn" class="action-btn btn-honk">
+        <span>🎺</span>
+        <span>HONK!</span>
+      </button>
+    </footer>
+  </div>
 
   <script type="module" src="/src/phone.js"></script>
 </body>

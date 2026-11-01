@@ -204,6 +204,108 @@
         align-self: flex-start;
       }
 
+      /* Camera & Phone Remote Modals */
+      #cameraModal, #phoneRemoteModal {
+        position: fixed;
+        inset: 0;
+        z-index: 125;
+        background: rgba(15, 23, 42, 0.94);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .preset-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 8px;
+        margin: 6px 0;
+      }
+      .preset-pill-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 8px 10px;
+        color: #f1f5f9;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        transition: all 0.15s ease;
+      }
+      .preset-pill-btn:hover {
+        border-color: #38bdf8;
+      }
+      .preset-pill-btn.active {
+        background: rgba(56, 189, 248, 0.2);
+        border-color: #38bdf8;
+        color: #38bdf8;
+      }
+      .slider-control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: #0f172a;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 12px;
+        color: #cbd5e1;
+      }
+      .slider-row label {
+        font-weight: 700;
+        min-width: 140px;
+      }
+      .slider-row input[type="range"] {
+        flex: 1;
+        accent-color: #38bdf8;
+      }
+      .slider-val-badge {
+        font-family: monospace;
+        font-size: 12px;
+        color: #38bdf8;
+        font-weight: 800;
+        min-width: 50px;
+        text-align: right;
+      }
+      .camera-actions-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 6px;
+      }
+      .btn-camera-action {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #f1f5f9;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .btn-camera-copy {
+        background: #0284c7;
+        color: #ffffff;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
       /* Startup / Pairing Overlay */
       #pairingOverlay {
         position: absolute;
@@ -654,6 +756,139 @@
       </div>
     </div>
 
+    <!-- Camera Perspective & Live Tuning Modal -->
+    <div id="cameraModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span>📷</span>
+            <span>Camera Perspective &amp; Manual Tuning</span>
+          </div>
+          <button id="closeCameraModalBtn" class="btn-close-modal">✕</button>
+        </div>
+
+        <p class="modal-desc">
+          Choose a perspective below or adjust distance and height in real time. In <strong>Fixed North (Unmoved)</strong>, the camera stays still and the car turns freely on screen to match the toddler's view from behind the toy car!
+        </p>
+
+        <!-- Presets Row -->
+        <div style="font-size: 12px; font-weight: 800; color: #38bdf8; margin-top: 4px;">CAMERA PERSPECTIVE PRESETS:</div>
+        <div class="preset-grid">
+          <button id="camPreset1Btn" class="preset-pill-btn active" data-preset="1">
+            <span>🏎️ Mode 1</span>
+            <span>Chase Follow</span>
+          </button>
+          <button id="camPreset2Btn" class="preset-pill-btn" data-preset="2">
+            <span>🧭 Mode 2 ⭐</span>
+            <span>Fixed North (Unmoved)</span>
+          </button>
+          <button id="camPreset3Btn" class="preset-pill-btn" data-preset="3">
+            <span>📐 Mode 3</span>
+            <span>High Isometric</span>
+          </button>
+          <button id="camPreset4Btn" class="preset-pill-btn" data-preset="4">
+            <span>🗺️ Mode 4</span>
+            <span>Top-Down Bird's Eye</span>
+          </button>
+          <button id="camPresetFreeBtn" class="preset-pill-btn" data-preset="free">
+            <span>🖱️ Mode 5</span>
+            <span>Free Mouse Orbit</span>
+          </button>
+        </div>
+
+        <!-- Live Sliders Group -->
+        <div class="slider-control-group">
+          <div class="slider-row">
+            <label for="camDistSlider">Camera Distance:</label>
+            <input type="range" id="camDistSlider" min="6" max="50" step="0.5" value="17" />
+            <span id="camDistVal" class="slider-val-badge">17.0m</span>
+          </div>
+
+          <div class="slider-row">
+            <label for="camHeightSlider">Camera Height:</label>
+            <input type="range" id="camHeightSlider" min="3" max="45" step="0.5" value="8.5" />
+            <span id="camHeightVal" class="slider-val-badge">8.5m</span>
+          </div>
+
+          <div class="slider-row">
+            <label for="camTargetHeightSlider">Look-At Elevation:</label>
+            <input type="range" id="camTargetHeightSlider" min="-2" max="10" step="0.2" value="1.5" />
+            <span id="camTargetHeightVal" class="slider-val-badge">1.5m</span>
+          </div>
+
+          <div class="slider-row">
+            <label>Follow Vehicle Heading:</label>
+            <button id="toggleCamFollowRotBtn" class="btn-hud-toggle active-green" style="flex: 1; text-align: center;">✓ Follows Car Rotation: ON</button>
+          </div>
+        </div>
+
+        <div style="font-size: 12px; font-weight: 800; color: #f1f5f9; margin-top: 6px;">SAVE TO CONFIG SLOTS (1-2-3-4):</div>
+        <div class="camera-actions-row">
+          <button id="saveSlot1Btn" class="btn-camera-action">💾 Save Slot 1</button>
+          <button id="saveSlot2Btn" class="btn-camera-action">💾 Save Slot 2</button>
+          <button id="saveSlot3Btn" class="btn-camera-action">💾 Save Slot 3</button>
+          <button id="saveSlot4Btn" class="btn-camera-action">💾 Save Slot 4</button>
+        </div>
+
+        <div class="camera-actions-row" style="margin-top: 10px;">
+          <button id="copyCamConfigBtn" class="btn-camera-copy">📋 Copy Camera Config JSON</button>
+          <button id="resetCamDefaultsBtn" class="btn-camera-action">↺ Reset Defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone Remote Control & Toddler Lock Modal -->
+    <div id="phoneRemoteModal">
+      <div class="modal-card" style="max-width: 480px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span>📱</span>
+            <span>Phone Remote &amp; Toddler Lock</span>
+          </div>
+          <button id="closePhoneRemoteModalBtn" class="btn-close-modal">✕</button>
+        </div>
+
+        <p class="modal-desc">
+          Configure the phone remotely from your PC while it's mounted on the toy car.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+          <div class="slider-control-group">
+            <div style="font-size: 12px; font-weight: 800; color: #38bdf8;">PHONE SCREEN DISPLAY:</div>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <button id="remoteViewTopDownBtn" class="preset-pill-btn active" style="flex: 1;">
+                <span>🚗</span>
+                <span>Top-Down Car View (Default)</span>
+              </button>
+              <button id="remoteViewSensorsBtn" class="preset-pill-btn" style="flex: 1;">
+                <span>🧭</span>
+                <span>Gyro Compass Dial</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="slider-control-group">
+            <div style="font-size: 12px; font-weight: 800; color: #38bdf8;">TODDLER SCREEN LOCK:</div>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <button id="remoteLockToggleBtn" class="btn-hud-toggle active" style="flex: 1; padding: 10px; font-size: 13px;">
+                🔒 Phone Screen: LOCKED
+              </button>
+            </div>
+            <div style="font-size: 11px; color: #94a3b8;">Prevents accidental touches from toddlers while driving.</div>
+          </div>
+
+          <div class="slider-control-group">
+            <div style="font-size: 12px; font-weight: 800; color: #38bdf8;">CALIBRATION &amp; HONK:</div>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <button id="remoteRecenterBtn" class="btn-camera-action" style="flex: 1;">🎯 Re-Center Compass</button>
+              <button id="remoteInvertBtn" class="btn-camera-action" style="flex: 1;">🔄 Invert Steering</button>
+              <button id="remoteHonkBtn" class="btn-camera-copy" style="background: #f59e0b;">🎺 Beep Horn!</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Startup / Pairing UI -->
     <div id="pairingOverlay">
       <div class="pairing-card">
@@ -708,6 +943,8 @@
         </div>
 
         <div class="hud-buttons">
+          <button id="cameraPanelBtn" class="icon-btn" title="Camera Perspective & Presets">📷</button>
+          <button id="phoneRemoteBtn" class="icon-btn" title="Phone Remote Control">📱⚙️</button>
           <button id="audioToggleBtn" class="icon-btn" title="Toggle Sound">🔊</button>
           <button id="reopenPairingBtn" class="icon-btn" title="Pair Phone">📱</button>
         </div>

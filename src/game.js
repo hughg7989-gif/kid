@@ -385,12 +385,29 @@ Object.values(instancedMeshes).forEach((mesh) => {
   scene.add(mesh);
 });
 
-function isOnRoad(x, z, margin = 4.0) {
-  const modX = Math.abs(((x % ROAD_INTERVAL) + ROAD_INTERVAL) % ROAD_INTERVAL);
-  const modZ = Math.abs(((z % ROAD_INTERVAL) + ROAD_INTERVAL) % ROAD_INTERVAL);
-  const roadHalfWidth = 7.0 + margin;
-  return (modX < roadHalfWidth || modX > ROAD_INTERVAL - roadHalfWidth) ||
-         (modZ < roadHalfWidth || modZ > ROAD_INTERVAL - roadHalfWidth);
+// Function to check if a location is on asphalt road, sidewalk, or an open forest passage
+function isRoadOrPassage(x, z, margin = 4.0) {
+  const relX = ((x % ROAD_INTERVAL) + ROAD_INTERVAL) % ROAD_INTERVAL;
+  const relZ = ((z % ROAD_INTERVAL) + ROAD_INTERVAL) % ROAD_INTERVAL;
+  const roadCenter = ROAD_INTERVAL / 2; // 50 (roads are centered at 50 in world space)
+  const roadHalfWidth = 10.0 + margin;  // 14 units road + sidewalk + buffer
+
+  // 1. Paved Crossroads (Roads centered at 50, exactly matching ground texture)
+  if (Math.abs(relX - roadCenter) < roadHalfWidth || Math.abs(relZ - roadCenter) < roadHalfWidth) {
+    return true;
+  }
+
+  // 2. Clear scenic passages & forest trails so toddler doesn't constantly crash into houses:
+  // Scenic north-south forest lane at relX = 22
+  if (Math.abs(relX - 22) < 5.0) return true;
+  // Scenic east-west forest lane at relZ = 78
+  if (Math.abs(relZ - 78) < 5.0) return true;
+  // Open park clearing / meadow in bottom-left quadrant
+  if (relX > 8 && relX < 36 && relZ > 8 && relZ < 36) {
+    return true;
+  }
+
+  return false;
 }
 
 let globalObsIdx = 0;
@@ -404,7 +421,7 @@ function populateObstacleGroup(mesh, count, typeId, baseRadius, canBeOnRoad = fa
       x = (Math.random() - 0.5) * WORLD_SPAN;
       z = (Math.random() - 0.5) * WORLD_SPAN;
       attempts++;
-    } while (attempts < 25 && !canBeOnRoad && isOnRoad(x, z, 3.5));
+    } while (attempts < 35 && !canBeOnRoad && isRoadOrPassage(x, z, 3.5));
 
     const scale = 0.8 + Math.random() * 0.4;
     const rotY = Math.random() * Math.PI * 2;
@@ -482,6 +499,19 @@ function mountVehicle(vehicleDef) {
   const vehicleNameBadge = document.getElementById('vehicleNameBadge');
   if (vehicleNameBadge) {
     vehicleNameBadge.textContent = `${vehicleDef.icon} ${vehicleDef.name}`;
+  }
+
+  if (activeConnection && activeConnection.open) {
+    activeConnection.send({
+      type: 'parent_command',
+      action: 'update_vehicle',
+      vehicle: {
+        id: vehicleDef.id,
+        name: vehicleDef.name,
+        icon: vehicleDef.icon,
+        baseSpeed: vehicleDef.baseSpeed,
+      }
+    });
   }
 }
 
@@ -693,6 +723,16 @@ function lerpAngle(from, to, t) {
   return from + diff * t;
 }
 
+// Deadzone filter for bed / carpet unevenness
+function applyTiltDeadzone(angleRad) {
+  const sign = Math.sign(angleRad);
+  const abs = Math.abs(angleRad);
+  const deadzone = 0.12; // ~7 degrees margin of error
+  if (abs <= deadzone) return 0;
+  const normalized = (abs - deadzone) / (Math.PI - deadzone);
+  return sign * normalized * Math.PI;
+}
+
 // ==========================================
 // 8. 3D PHYSICS WITH REAL FLIP & ON-LAND DRIVE
 // ==========================================
@@ -700,15 +740,18 @@ function checkCollisionsAndDrive(dt) {
   // 1. Steering Yaw interpolation
   carState.angle = lerpAngle(carState.angle, carState.targetAngle, Math.min(1.0, dt * 5.5));
 
-  // 2. 3D Pitch & Roll from Phone
-  // When phone is tilted or flipped upside down, the 3D car reflects that in real-time!
-  carState.pitch += (carState.targetPitch - carState.pitch) * Math.min(1.0, dt * 7.0);
-  carState.roll += (carState.targetRoll - carState.roll) * Math.min(1.0, dt * 7.0);
+  // 2. 3D Pitch & Roll from Phone with Bed Deadzone
+  const filteredTargetPitch = applyTiltDeadzone(carState.targetPitch);
+  const filteredTargetRoll = applyTiltDeadzone(carState.targetRoll);
+
+  carState.pitch += (filteredTargetPitch - carState.pitch) * Math.min(1.0, dt * 7.0);
+  carState.roll += (filteredTargetRoll - carState.roll) * Math.min(1.0, dt * 7.0);
 
   // Determine if wheels are on land:
-  // Upright when cos(pitch) * cos(roll) > 0.4
+  // "atm 45 degrees right rotation almost car is flipped and still travels with it should not"
   const isUpright = Math.cos(carState.pitch) * Math.cos(carState.roll);
-  const wheelsOnLand = (carState.y <= 0.08) && (isUpright > 0.35);
+  const isExcessiveTiltOrFlipped = Math.abs(carState.pitch) > 0.62 || Math.abs(carState.roll) > 0.62 || isUpright < 0.40;
+  const wheelsOnLand = (carState.y <= 0.08) && !isExcessiveTiltOrFlipped;
 
   // 3. 3D Flight & Jump Dynamics
   if (carState.isAirborne || carState.y > 0) {
@@ -732,15 +775,14 @@ function checkCollisionsAndDrive(dt) {
     carState.bonusSpeed = Math.max(0, carState.bonusSpeed - dt * 10.0);
   }
 
-  // 4. Movement: "obviously goes forward when is with wheels on land"
-  // When wheels are on land, cruise forward at currentSpeed + bonusSpeed.
-  // When flipped upside down in accident, wheels don't push the ground!
+  // 4. Movement: "when jump the speed should not be reduced"
+  // When wheels on land OR flying airborne through a jump, full speed is maintained!
+  // Only stop moving forward when flipped upside down / tilted > 35 degrees on land!
   let forwardDriveSpeed = 0;
-  if (wheelsOnLand) {
-    forwardDriveSpeed = carState.currentSpeed + carState.bonusSpeed;
+  if (isExcessiveTiltOrFlipped && carState.y <= 0.08) {
+    forwardDriveSpeed = carState.bonusSpeed * 0.4;
   } else {
-    // In air or upside down, car only carries residual coasting momentum
-    forwardDriveSpeed = carState.bonusSpeed * 0.7;
+    forwardDriveSpeed = carState.currentSpeed + carState.bonusSpeed;
   }
 
   const forwardX = Math.sin(carState.angle);
@@ -812,7 +854,9 @@ function checkCollisionsAndDrive(dt) {
 
   // 6. Update Vehicle 3D Transform
   if (currentVehicleMesh) {
-    currentVehicleMesh.position.set(carState.x, carState.y, carState.z);
+    // "also make it so it doesn't rotate through the ground as atm looks that vehicle is rotating through the ground instead of being on top of it"
+    const groundContactLift = Math.abs(Math.sin(carState.pitch)) * 1.85 + Math.abs(Math.sin(carState.roll)) * 1.15;
+    currentVehicleMesh.position.set(carState.x, carState.y + groundContactLift, carState.z);
     currentVehicleMesh.rotation.set(carState.pitch, carState.angle, carState.roll, 'YXZ');
 
     const rollSpeed = (forwardDriveSpeed / 0.6) * dt;
@@ -821,19 +865,146 @@ function checkCollisionsAndDrive(dt) {
     }
   }
 
-  // 7. Third-Person Chase Camera
-  const camDist = currentVehicleDef.id === 'bus' ? 19.0 : 16.0;
-  const camHeight = (currentVehicleDef.id === 'bus' ? 9.5 : 8.5) + carState.y * 0.45;
+  // 7. Dynamic Camera Tracking with 5 Modes & Presets
+  updateCameraPerspective(dt);
+}
 
-  const desiredCamX = carState.x - Math.sin(carState.angle) * camDist;
-  const desiredCamZ = carState.z - Math.cos(carState.angle) * camDist;
-  const desiredCamY = camHeight;
+// ==========================================
+// 8B. CAMERA PERSPECTIVE PRESETS & 5 MODES
+// ==========================================
+export const DEFAULT_CAMERA_PRESETS = {
+  1: {
+    name: 'Chase Follow',
+    mode: 'chase',
+    dist: 17.0,
+    height: 8.5,
+    targetHeight: 1.5,
+    followRotation: true,
+    smoothSpeed: 5.0,
+  },
+  2: {
+    name: 'Fixed North (Unmoved)',
+    mode: 'fixed_north',
+    dist: 18.0,
+    height: 12.0,
+    targetHeight: 1.2,
+    followRotation: false,
+    smoothSpeed: 6.0,
+  },
+  3: {
+    name: 'High Isometric',
+    mode: 'isometric',
+    dist: 24.0,
+    height: 18.0,
+    targetHeight: 1.0,
+    followRotation: false,
+    smoothSpeed: 5.5,
+  },
+  4: {
+    name: 'Top-Down Bird Eye',
+    mode: 'top_down',
+    dist: 0.1,
+    height: 32.0,
+    targetHeight: 0.5,
+    followRotation: false,
+    smoothSpeed: 7.0,
+  },
+};
 
-  camera.position.x += (desiredCamX - camera.position.x) * Math.min(1.0, dt * 5.0);
-  camera.position.y += (desiredCamY - camera.position.y) * Math.min(1.0, dt * 5.0);
-  camera.position.z += (desiredCamZ - camera.position.z) * Math.min(1.0, dt * 5.0);
+let cameraPresets = { ...DEFAULT_CAMERA_PRESETS };
+const savedCustomPresets = localStorage.getItem('toycar_camera_presets');
+if (savedCustomPresets) {
+  try {
+    cameraPresets = { ...DEFAULT_CAMERA_PRESETS, ...JSON.parse(savedCustomPresets) };
+  } catch (e) {}
+}
 
-  camera.lookAt(carState.x, 1.6 + carState.y * 0.8, carState.z);
+let activePresetSlot = parseInt(localStorage.getItem('toycar_active_cam_slot') || '1', 10);
+let cameraConfig = { ...(cameraPresets[activePresetSlot] || cameraPresets[1]) };
+
+// Free Orbit Camera state
+let freeCamAzimuth = 0;
+let freeCamElevation = 0.52;
+let isFreeCamDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+// Mouse Drag for Free Orbit Cam
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (cameraConfig.mode === 'free') {
+    isFreeCamDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (isFreeCamDragging && cameraConfig.mode === 'free') {
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+
+    freeCamAzimuth -= dx * 0.007;
+    freeCamElevation = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, freeCamElevation + dy * 0.007));
+  }
+});
+
+window.addEventListener('pointerup', () => {
+  isFreeCamDragging = false;
+});
+
+renderer.domElement.addEventListener('wheel', (e) => {
+  if (cameraConfig.mode === 'free') {
+    e.preventDefault();
+    cameraConfig.dist = Math.max(6, Math.min(65, cameraConfig.dist + e.deltaY * 0.025));
+    const distSlider = document.getElementById('camDistSlider');
+    const distVal = document.getElementById('camDistVal');
+    if (distSlider) distSlider.value = cameraConfig.dist;
+    if (distVal) distVal.textContent = cameraConfig.dist.toFixed(1) + 'm';
+  }
+}, { passive: false });
+
+function updateCameraPerspective(dt) {
+  let desiredCamX, desiredCamZ, desiredCamY;
+
+  if (cameraConfig.followRotation) {
+    // Mode 1: Rotates behind car heading
+    desiredCamX = carState.x - Math.sin(carState.angle) * cameraConfig.dist;
+    desiredCamZ = carState.z - Math.cos(carState.angle) * cameraConfig.dist;
+    desiredCamY = cameraConfig.height + carState.y * 0.45;
+  } else if (cameraConfig.mode === 'isometric') {
+    // Mode 3: High Isometric (Fixed angle SW)
+    const isoDist = cameraConfig.dist * 0.7071;
+    desiredCamX = carState.x - isoDist;
+    desiredCamZ = carState.z - isoDist;
+    desiredCamY = cameraConfig.height + carState.y * 0.45;
+  } else if (cameraConfig.mode === 'top_down') {
+    // Mode 4: Top-Down Bird's Eye
+    desiredCamX = carState.x;
+    desiredCamZ = carState.z - 0.01;
+    desiredCamY = cameraConfig.height + carState.y;
+  } else if (cameraConfig.mode === 'free') {
+    // Mode 5: Free Mouse Orbit
+    const cosEl = Math.cos(freeCamElevation);
+    const sinEl = Math.sin(freeCamElevation);
+    desiredCamX = carState.x + Math.sin(freeCamAzimuth) * cosEl * cameraConfig.dist;
+    desiredCamZ = carState.z - Math.cos(freeCamAzimuth) * cosEl * cameraConfig.dist;
+    desiredCamY = carState.y + Math.max(2.0, sinEl * cameraConfig.dist);
+  } else {
+    // Mode 2: "Fixed North (Unmoved)" - Camera stays directly behind car along world -Z axis!
+    // As the toddler turns their real toy car right, virtual car turns right on screen!
+    desiredCamX = carState.x;
+    desiredCamZ = carState.z - cameraConfig.dist;
+    desiredCamY = cameraConfig.height + carState.y * 0.45;
+  }
+
+  const smooth = Math.min(1.0, dt * (cameraConfig.smoothSpeed || 5.5));
+  camera.position.x += (desiredCamX - camera.position.x) * smooth;
+  camera.position.y += (desiredCamY - camera.position.y) * smooth;
+  camera.position.z += (desiredCamZ - camera.position.z) * smooth;
+
+  camera.lookAt(carState.x, 1.4 + carState.y * 0.8 + (cameraConfig.targetHeight || 1.2), carState.z);
 
   sunLight.position.set(carState.x + 60, 110 + carState.y, carState.z + 70);
   sunLight.target.position.set(carState.x, carState.y, carState.z);
@@ -1361,6 +1532,18 @@ function initHostPeer() {
       }
       if (connStatusText) connStatusText.textContent = 'PHONE CONNECTED 📱';
       if (inputModeValue) inputModeValue.textContent = 'Phone Gyro 3D';
+
+      // Send active vehicle to phone so phone displays top-down mirror
+      conn.send({
+        type: 'parent_command',
+        action: 'update_vehicle',
+        vehicle: {
+          id: currentVehicleDef.id,
+          name: currentVehicleDef.name,
+          icon: currentVehicleDef.icon,
+          baseSpeed: currentVehicleDef.baseSpeed,
+        }
+      });
     });
 
     conn.on('data', (data) => {
@@ -1581,6 +1764,232 @@ if (toggleDockBtn && bottomDock) {
     toggleDockBtn.textContent = bottomDock.classList.contains('collapsed')
       ? '▴ Show Controls'
       : '▾ Hide Controls';
+  });
+}
+
+// ==========================================
+// 12B. CAMERA PERSPECTIVE MODAL & TUNING
+// ==========================================
+const cameraModal = document.getElementById('cameraModal');
+const cameraPanelBtn = document.getElementById('cameraPanelBtn');
+const closeCameraModalBtn = document.getElementById('closeCameraModalBtn');
+
+const camDistSlider = document.getElementById('camDistSlider');
+const camDistVal = document.getElementById('camDistVal');
+const camHeightSlider = document.getElementById('camHeightSlider');
+const camHeightVal = document.getElementById('camHeightVal');
+const camTargetHeightSlider = document.getElementById('camTargetHeightSlider');
+const camTargetHeightVal = document.getElementById('camTargetHeightVal');
+const toggleCamFollowRotBtn = document.getElementById('toggleCamFollowRotBtn');
+const copyCamConfigBtn = document.getElementById('copyCamConfigBtn');
+const resetCamDefaultsBtn = document.getElementById('resetCamDefaultsBtn');
+
+function syncCameraSlidersToConfig() {
+  if (camDistSlider) camDistSlider.value = cameraConfig.dist;
+  if (camDistVal) camDistVal.textContent = cameraConfig.dist.toFixed(1) + 'm';
+  if (camHeightSlider) camHeightSlider.value = cameraConfig.height;
+  if (camHeightVal) camHeightVal.textContent = cameraConfig.height.toFixed(1) + 'm';
+  if (camTargetHeightSlider) camTargetHeightSlider.value = cameraConfig.targetHeight || 1.2;
+  if (camTargetHeightVal) camTargetHeightVal.textContent = (cameraConfig.targetHeight || 1.2).toFixed(1) + 'm';
+
+  if (toggleCamFollowRotBtn) {
+    toggleCamFollowRotBtn.classList.toggle('active-green', cameraConfig.followRotation);
+    toggleCamFollowRotBtn.textContent = cameraConfig.followRotation
+      ? '✓ Follows Car Rotation: ON'
+      : '✕ Fixed North (Unmoved): ACTIVE';
+  }
+
+  document.querySelectorAll('.preset-pill-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset == activePresetSlot || (cameraConfig.mode === 'free' && b.dataset.preset === 'free'));
+  });
+}
+
+function applyCameraPreset(slotNumOrMode) {
+  if (slotNumOrMode === 'free') {
+    cameraConfig.mode = 'free';
+    cameraConfig.followRotation = false;
+  } else {
+    activePresetSlot = parseInt(slotNumOrMode, 10);
+    localStorage.setItem('toycar_active_cam_slot', activePresetSlot);
+    cameraConfig = { ...(cameraPresets[activePresetSlot] || cameraPresets[1]) };
+  }
+  syncCameraSlidersToConfig();
+}
+
+if (cameraPanelBtn && cameraModal) {
+  cameraPanelBtn.addEventListener('click', () => {
+    syncCameraSlidersToConfig();
+    cameraModal.style.display = 'flex';
+  });
+}
+if (closeCameraModalBtn && cameraModal) {
+  closeCameraModalBtn.addEventListener('click', () => {
+    cameraModal.style.display = 'none';
+  });
+}
+
+// Preset button handlers
+['1', '2', '3', '4', 'Free'].forEach(id => {
+  const btn = document.getElementById(`camPreset${id}Btn`);
+  if (btn) {
+    btn.addEventListener('click', () => {
+      applyCameraPreset(id.toLowerCase());
+    });
+  }
+});
+
+// Live Sliders
+if (camDistSlider) {
+  camDistSlider.addEventListener('input', (e) => {
+    cameraConfig.dist = parseFloat(e.target.value);
+    if (camDistVal) camDistVal.textContent = cameraConfig.dist.toFixed(1) + 'm';
+  });
+}
+if (camHeightSlider) {
+  camHeightSlider.addEventListener('input', (e) => {
+    cameraConfig.height = parseFloat(e.target.value);
+    if (camHeightVal) camHeightVal.textContent = cameraConfig.height.toFixed(1) + 'm';
+  });
+}
+if (camTargetHeightSlider) {
+  camTargetHeightSlider.addEventListener('input', (e) => {
+    cameraConfig.targetHeight = parseFloat(e.target.value);
+    if (camTargetHeightVal) camTargetHeightVal.textContent = cameraConfig.targetHeight.toFixed(1) + 'm';
+  });
+}
+if (toggleCamFollowRotBtn) {
+  toggleCamFollowRotBtn.addEventListener('click', () => {
+    cameraConfig.followRotation = !cameraConfig.followRotation;
+    syncCameraSlidersToConfig();
+  });
+}
+
+// Save to slots 1, 2, 3, 4
+[1, 2, 3, 4].forEach(slot => {
+  const btn = document.getElementById(`saveSlot${slot}Btn`);
+  if (btn) {
+    btn.addEventListener('click', () => {
+      cameraPresets[slot] = { ...cameraConfig, name: `Custom Slot ${slot}` };
+      localStorage.setItem('toycar_camera_presets', JSON.stringify(cameraPresets));
+      btn.textContent = `✓ Saved Slot ${slot}!`;
+      setTimeout(() => btn.textContent = `💾 Save Slot ${slot}`, 1500);
+    });
+  }
+});
+
+// Copy Camera Config JSON to Clipboard
+if (copyCamConfigBtn) {
+  copyCamConfigBtn.addEventListener('click', () => {
+    const exportData = {
+      activePreset: activePresetSlot,
+      config: cameraConfig,
+    };
+    navigator.clipboard.writeText(JSON.stringify(exportData, null, 2)).then(() => {
+      copyCamConfigBtn.textContent = '✓ Copied Config! Paste in chat';
+      copyCamConfigBtn.style.background = '#10b981';
+      setTimeout(() => {
+        copyCamConfigBtn.textContent = '📋 Copy Camera Config JSON';
+        copyCamConfigBtn.style.background = '#0284c7';
+      }, 2500);
+    });
+  });
+}
+
+if (resetCamDefaultsBtn) {
+  resetCamDefaultsBtn.addEventListener('click', () => {
+    cameraPresets = { ...DEFAULT_CAMERA_PRESETS };
+    localStorage.removeItem('toycar_camera_presets');
+    applyCameraPreset(1);
+  });
+}
+
+// ==========================================
+// 12C. PARENT PHONE REMOTE CONTROL MODAL
+// ==========================================
+const phoneRemoteModal = document.getElementById('phoneRemoteModal');
+const phoneRemoteBtn = document.getElementById('phoneRemoteBtn');
+const closePhoneRemoteModalBtn = document.getElementById('closePhoneRemoteModalBtn');
+
+const remoteViewTopDownBtn = document.getElementById('remoteViewTopDownBtn');
+const remoteViewSensorsBtn = document.getElementById('remoteViewSensorsBtn');
+const remoteLockToggleBtn = document.getElementById('remoteLockToggleBtn');
+const remoteRecenterBtn = document.getElementById('remoteRecenterBtn');
+const remoteInvertBtn = document.getElementById('remoteInvertBtn');
+const remoteHonkBtn = document.getElementById('remoteHonkBtn');
+
+let parentPhoneLocked = true;
+
+if (phoneRemoteBtn && phoneRemoteModal) {
+  phoneRemoteBtn.addEventListener('click', () => {
+    phoneRemoteModal.style.display = 'flex';
+  });
+}
+if (closePhoneRemoteModalBtn && phoneRemoteModal) {
+  closePhoneRemoteModalBtn.addEventListener('click', () => {
+    phoneRemoteModal.style.display = 'none';
+  });
+}
+
+function sendParentCommand(action, payload = {}) {
+  if (activeConnection && activeConnection.open) {
+    activeConnection.send({
+      type: 'parent_command',
+      action,
+      ...payload
+    });
+  }
+}
+
+if (remoteViewTopDownBtn) {
+  remoteViewTopDownBtn.addEventListener('click', () => {
+    remoteViewTopDownBtn.classList.add('active');
+    if (remoteViewSensorsBtn) remoteViewSensorsBtn.classList.remove('active');
+    sendParentCommand('toggle_view', { mode: 'top_down' });
+  });
+}
+
+if (remoteViewSensorsBtn) {
+  remoteViewSensorsBtn.addEventListener('click', () => {
+    remoteViewSensorsBtn.classList.add('active');
+    if (remoteViewTopDownBtn) remoteViewTopDownBtn.classList.remove('active');
+    sendParentCommand('toggle_view', { mode: 'sensors' });
+  });
+}
+
+if (remoteLockToggleBtn) {
+  remoteLockToggleBtn.addEventListener('click', () => {
+    parentPhoneLocked = !parentPhoneLocked;
+    remoteLockToggleBtn.classList.toggle('active', parentPhoneLocked);
+    remoteLockToggleBtn.textContent = parentPhoneLocked ? '🔒 Phone Screen: LOCKED' : '🔓 Phone Screen: UNLOCKED';
+    sendParentCommand('toggle_lock', { locked: parentPhoneLocked });
+  });
+}
+
+if (remoteRecenterBtn) {
+  remoteRecenterBtn.addEventListener('click', () => {
+    sendParentCommand('recenter');
+    remoteRecenterBtn.textContent = '✓ Re-Centered!';
+    setTimeout(() => remoteRecenterBtn.textContent = '🎯 Re-Center Compass', 1200);
+  });
+}
+
+if (remoteInvertBtn) {
+  remoteInvertBtn.addEventListener('click', () => {
+    sendParentCommand('toggle_invert');
+    remoteInvertBtn.textContent = '✓ Inverted!';
+    setTimeout(() => remoteInvertBtn.textContent = '🔄 Invert Steering', 1200);
+  });
+}
+
+if (remoteHonkBtn) {
+  remoteHonkBtn.addEventListener('click', () => {
+    soundEngine.playHorn();
+    sendParentCommand('honk');
+    if (hornBubble) {
+      hornBubble.textContent = '🎺 BEEP BEEP!';
+      hornBubble.classList.add('active');
+      setTimeout(() => hornBubble.classList.remove('active'), 800);
+    }
   });
 }
 
