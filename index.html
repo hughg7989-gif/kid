@@ -705,6 +705,190 @@
         transform: translate(-50%, -50%) scale(1);
         opacity: 1;
       }
+
+      /* Vehicle Garage Modal & List */
+      #vehicleGarageModal, #alignmentModal {
+        position: fixed;
+        inset: 0;
+        z-index: 130;
+        background: rgba(15, 23, 42, 0.94);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        backdrop-filter: blur(10px);
+      }
+      .garage-card {
+        background: #1e293b;
+        border: 2px solid rgba(56, 189, 248, 0.4);
+        border-radius: 24px;
+        padding: 24px 28px;
+        max-width: 680px;
+        width: 100%;
+        max-height: 88vh;
+        overflow-y: auto;
+        color: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+      }
+      .garage-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        max-height: 52vh;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      .garage-item {
+        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        transition: all 0.15s ease;
+      }
+      .garage-item:hover {
+        border-color: rgba(56, 189, 248, 0.4);
+        background: rgba(30, 41, 59, 0.9);
+      }
+      .garage-item.active {
+        border: 2px solid #38bdf8;
+        background: rgba(2, 132, 199, 0.18);
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+      }
+      .car-info-col {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+        min-width: 0;
+      }
+      .car-avatar {
+        font-size: 32px;
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .car-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .car-name-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .car-title-text {
+        font-size: 15px;
+        font-weight: 800;
+        color: #f8fafc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .car-type-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        background: rgba(56, 189, 248, 0.2);
+        color: #38bdf8;
+      }
+      .car-stats-sub {
+        font-size: 12px;
+        color: #94a3b8;
+        display: flex;
+        gap: 10px;
+      }
+      .car-actions-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .btn-garage-action {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #cbd5e1;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .btn-garage-action:hover {
+        background: rgba(255, 255, 255, 0.18);
+        color: #fff;
+      }
+      .btn-drive-now {
+        background: linear-gradient(135deg, #0284c7, #2563eb);
+        color: #fff;
+        border: 1px solid #38bdf8;
+      }
+      .btn-drive-now:hover {
+        background: linear-gradient(135deg, #0369a1, #1d4ed8);
+      }
+      .btn-delete-car {
+        color: #f87171;
+        border-color: rgba(248, 113, 113, 0.3);
+      }
+      .btn-delete-car:hover {
+        background: rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+      }
+
+      /* Alignment Guide Modal */
+      .align-visual-card {
+        background: #0f172a;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        border-radius: 16px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+      }
+      .align-step {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-align: left;
+        font-size: 13px;
+        color: #cbd5e1;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 8px 12px;
+        border-radius: 10px;
+      }
+      .align-step-num {
+        background: #0284c7;
+        color: #fff;
+        font-weight: 900;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        flex-shrink: 0;
+      }
     </style>
   </head>
   <body>
@@ -756,6 +940,86 @@
       </div>
     </div>
 
+    <!-- Vehicle Garage & Manager Modal -->
+    <div id="vehicleGarageModal">
+      <div class="garage-card">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span>🚗</span>
+            <span>Toy Vehicle Garage &amp; Manager</span>
+          </div>
+          <button id="closeGarageModalBtn" class="btn-close-modal">✕</button>
+        </div>
+
+        <p class="modal-desc">
+          Manage all your vehicles in one place! Switch active cars, rename them for your kid, delete or export them, or generate brand new ones with AI.
+        </p>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button id="garageAddVehicleBtn" class="btn-add-vehicle" onclick="document.getElementById('addVehicleFileInput').click()">
+            <span>📁</span>
+            <span>+ Import Car .js</span>
+          </button>
+          <button id="garageOpenAiBtn" class="btn-ai-prompt">
+            <span>✨</span>
+            <span>Generate Vehicle with AI</span>
+          </button>
+        </div>
+
+        <!-- Vehicle List Container -->
+        <div id="garageVehicleList" class="garage-list">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Alignment & Pre-Configuration Modal -->
+    <div id="alignmentModal">
+      <div class="modal-card" style="max-width: 500px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span>🎯</span>
+            <span>Toy Car &amp; Phone Pre-Alignment</span>
+          </div>
+          <button id="closeAlignmentModalBtn" class="btn-close-modal">✕</button>
+        </div>
+
+        <p class="modal-desc">
+          Align the physical toy car and phone so turning in real life matches the game screen 1-to-1!
+        </p>
+
+        <div class="align-visual-card">
+          <div style="font-size: 48px;">🚗 📱 💻</div>
+          <div class="align-step">
+            <span class="align-step-num">1</span>
+            <span>Point your physical toy car <strong>straight forward towards this screen</strong>.</span>
+          </div>
+          <div class="align-step">
+            <span class="align-step-num">2</span>
+            <span>Place phone <strong>flat</strong> on the car with the top of the phone facing the headlights.</span>
+          </div>
+          <div class="align-step">
+            <span class="align-step-num">3</span>
+            <span>Click <strong>Lock Forward Alignment</strong> below!</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 10px; flex-direction: column;">
+          <button id="lockAlignmentBtn" class="btn-mount-paste" style="background: linear-gradient(135deg, #0284c7, #2563eb); font-size: 14px; padding: 12px;">
+            🎯 Lock In Forward Alignment
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button id="flip180PCBtn" class="btn-camera-action" style="flex: 1; font-weight: 700;">
+              🔄 Flip 180° (Phone Mounted Backwards)
+            </button>
+            <button id="resetAlignmentBtn" class="btn-camera-action" style="flex: 1;">
+              ↺ Reset to Zero
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Camera Perspective & Live Tuning Modal -->
     <div id="cameraModal">
       <div class="modal-card">
@@ -768,31 +1032,31 @@
         </div>
 
         <p class="modal-desc">
-          Choose a perspective below or adjust distance and height in real time. In <strong>Fixed North (Unmoved)</strong>, the camera stays still and the car turns freely on screen to match the toddler's view from behind the toy car!
+          Choose a perspective below or adjust distance and height in real time. In <strong>Free Mouse Orbit</strong>, drag to look around your car from any angle!
         </p>
 
         <!-- Presets Row -->
         <div style="font-size: 12px; font-weight: 800; color: #38bdf8; margin-top: 4px;">CAMERA PERSPECTIVE PRESETS:</div>
         <div class="preset-grid">
           <button id="camPreset1Btn" class="preset-pill-btn active" data-preset="1">
-            <span>🏎️ Mode 1</span>
-            <span>Chase Follow</span>
+            <span>🖱️ Mode 1 ⭐</span>
+            <span>Free Mouse Orbit (Default)</span>
           </button>
           <button id="camPreset2Btn" class="preset-pill-btn" data-preset="2">
-            <span>🧭 Mode 2 ⭐</span>
-            <span>Fixed North (Unmoved)</span>
+            <span>🏎️ Mode 2</span>
+            <span>Chase Follow</span>
           </button>
           <button id="camPreset3Btn" class="preset-pill-btn" data-preset="3">
-            <span>📐 Mode 3</span>
-            <span>High Isometric</span>
+            <span>🧭 Mode 3</span>
+            <span>Fixed North (Unmoved)</span>
           </button>
           <button id="camPreset4Btn" class="preset-pill-btn" data-preset="4">
             <span>🗺️ Mode 4</span>
             <span>Top-Down Bird's Eye</span>
           </button>
-          <button id="camPresetFreeBtn" class="preset-pill-btn" data-preset="free">
-            <span>🖱️ Mode 5</span>
-            <span>Free Mouse Orbit</span>
+          <button id="camPreset5Btn" class="preset-pill-btn" data-preset="5">
+            <span>📐 Mode 5</span>
+            <span>High Isometric</span>
           </button>
         </div>
 
@@ -943,6 +1207,7 @@
         </div>
 
         <div class="hud-buttons">
+          <button id="alignHudBtn" class="icon-btn" title="Align Direction to Toy Car">🎯</button>
           <button id="cameraPanelBtn" class="icon-btn" title="Camera Perspective & Presets">📷</button>
           <button id="phoneRemoteBtn" class="icon-btn" title="Phone Remote Control">📱⚙️</button>
           <button id="audioToggleBtn" class="icon-btn" title="Toggle Sound">🔊</button>
@@ -951,20 +1216,20 @@
       </div>
 
       <div class="dock-container">
-        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles, AI Car &amp; Controls</button>
+        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles &amp; Controls</button>
         <div id="bottomDock" class="bottom-dock">
           <!-- Vehicle Selector Row -->
           <div class="vehicle-row">
-            <div id="vehicleMenu" class="vehicle-menu"></div>
-            <!-- Add Car Button (File Picker) -->
-            <button id="addVehicleBtn" class="btn-add-vehicle" onclick="document.getElementById('addVehicleFileInput').click()">
-              <span>📁</span>
-              <span>+ Add Car .js</span>
+            <button id="openGarageBtn" class="vehicle-select-btn active" style="font-size: 13px; padding: 7px 16px; background: linear-gradient(135deg, #0284c7, #2563eb);">
+              <span id="activeCarIconDock">🏎️</span>
+              <span id="activeCarNameDock">Toy Race Car</span>
+              <span style="font-size: 11px; opacity: 0.85; margin-left: 4px;">▼ Garage (<span id="garageCountDock">5</span>)</span>
             </button>
-            <!-- AI Prompt Generator Button -->
+            <div id="vehicleQuickPills" class="vehicle-menu"></div>
+            <button id="dockAlignBtn" class="btn-hud-toggle" style="color: #38bdf8;">🎯 Align Heading</button>
             <button id="openAiPromptBtn" class="btn-ai-prompt">
               <span>✨</span>
-              <span>AI Vehicle Generator</span>
+              <span>AI Generator</span>
             </button>
           </div>
 

@@ -15,6 +15,7 @@ let relativeRollRad = 0;         // Relative roll
 let manualOffsetDeg = 0;         // Touch slider tweak
 
 let invertSteering = localStorage.getItem('toycar_invert_steering') === '1';
+let phoneFlip180 = localStorage.getItem('toycar_phone_flip180') === '1';
 
 // View Mode: 'top_down' (default for kid) or 'sensors' (for parent/tuning)
 let currentViewMode = localStorage.getItem('toycar_phone_view') || 'top_down';
@@ -297,6 +298,24 @@ function initPeerConnection() {
     connectToHost();
   });
 
+  // Receive live 3D gameplay video stream from PC!
+  peer.on('call', (call) => {
+    call.answer(); // Answer without sending stream
+    call.on('stream', (remoteStream) => {
+      console.log('Received live 3D gameplay stream from PC');
+      const video = document.getElementById('gameplayStreamVideo');
+      const canvas = document.getElementById('topDownCanvas');
+      const badge = document.getElementById('streamLiveBadge');
+      if (video) {
+        video.srcObject = remoteStream;
+        video.style.display = 'block';
+        video.play().catch(e => console.warn('Stream play warning:', e));
+        if (badge) badge.style.display = 'flex';
+        if (canvas) canvas.style.opacity = '0.2';
+      }
+    });
+  });
+
   peer.on('error', (err) => {
     console.warn('Peer error:', err);
     updateStatus('RECONNECTING...', 'disconnected');
@@ -338,6 +357,11 @@ function connectToHost() {
       } else if (data.action === 'recenter') {
         calibrateSensors();
         if (navigator.vibrate) navigator.vibrate([30, 30, 30]);
+      } else if (data.action === 'toggle_flip180') {
+        phoneFlip180 = typeof data.flip === 'boolean' ? data.flip : !phoneFlip180;
+        localStorage.setItem('toycar_phone_flip180', phoneFlip180 ? '1' : '0');
+        updateFlip180UI();
+        compute3DOrientation();
       } else if (data.action === 'toggle_lock') {
         isScreenLocked = typeof data.locked === 'boolean' ? data.locked : !isScreenLocked;
         localStorage.setItem('toycar_phone_locked', isScreenLocked ? '1' : '0');
@@ -395,14 +419,37 @@ function handleOrientation(e) {
   compute3DOrientation();
 }
 
+function updateFlip180UI() {
+  const btn = document.getElementById('phoneFlip180Btn');
+  if (btn) {
+    btn.style.color = phoneFlip180 ? '#38bdf8' : '#facc15';
+    btn.style.borderColor = phoneFlip180 ? '#38bdf8' : 'rgba(250,204,21,0.4)';
+    btn.textContent = phoneFlip180 ? '✓ Inverted 180°' : '🔄 Flip 180°';
+  }
+}
+
 function compute3DOrientation() {
+  // Prevent sensor gimbal flip: when a phone rolls upside down or screen faces down,
+  // native sensors invert alpha by 180 degrees.
+  // We un-invert it so the front of the car stays facing the front!
+  const isUpsideDown = Math.abs(currentRawBeta) > 90 || Math.abs(currentRawGamma) > 90;
+  let rawAlpha = currentRawAlpha;
+  if (isUpsideDown) {
+    rawAlpha = (rawAlpha + 180) % 360;
+  }
+
   // 1. Yaw (Compass heading)
-  let diffAlpha = currentRawAlpha - zeroAlpha;
+  let diffAlpha = rawAlpha - zeroAlpha;
   while (diffAlpha > 180) diffAlpha -= 360;
   while (diffAlpha < -180) diffAlpha += 360;
 
   if (invertSteering) {
     diffAlpha = -diffAlpha;
+  }
+
+  // If phone was mounted facing backwards (e.g. charging port facing forward):
+  if (phoneFlip180) {
+    diffAlpha = diffAlpha > 0 ? (diffAlpha - 180) : (diffAlpha + 180);
   }
 
   let totalYaw = diffAlpha + manualOffsetDeg;
@@ -593,6 +640,60 @@ if (recenterBtn) {
   recenterBtn.addEventListener('click', () => {
     if (navigator.vibrate) navigator.vibrate([25, 50, 25]);
     calibrateSensors();
+  });
+}
+
+const quickRecenterPhoneBtn = document.getElementById('quickRecenterPhoneBtn');
+if (quickRecenterPhoneBtn) {
+  quickRecenterPhoneBtn.addEventListener('click', () => {
+    if (navigator.vibrate) navigator.vibrate([25, 50, 25]);
+    calibrateSensors();
+  });
+}
+
+const phoneFlip180Btn = document.getElementById('phoneFlip180Btn');
+if (phoneFlip180Btn) {
+  phoneFlip180Btn.addEventListener('click', () => {
+    if (navigator.vibrate) navigator.vibrate(30);
+    phoneFlip180 = !phoneFlip180;
+    localStorage.setItem('toycar_phone_flip180', phoneFlip180 ? '1' : '0');
+    updateFlip180UI();
+    compute3DOrientation();
+    if (conn && conn.open) {
+      conn.send({ type: 'parent_command', action: 'toggle_flip180', flip: phoneFlip180 });
+    }
+  });
+}
+updateFlip180UI();
+
+const phoneCamTopDownBtn = document.getElementById('phoneCamTopDownBtn');
+const phoneCamChaseBtn = document.getElementById('phoneCamChaseBtn');
+
+if (phoneCamTopDownBtn) {
+  phoneCamTopDownBtn.addEventListener('click', () => {
+    phoneCamTopDownBtn.style.color = '#38bdf8';
+    phoneCamTopDownBtn.style.borderColor = '#38bdf8';
+    if (phoneCamChaseBtn) {
+      phoneCamChaseBtn.style.color = '#cbd5e1';
+      phoneCamChaseBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+    }
+    if (conn && conn.open) {
+      conn.send({ type: 'parent_command', action: 'set_camera_preset', preset: 4 });
+    }
+  });
+}
+
+if (phoneCamChaseBtn) {
+  phoneCamChaseBtn.addEventListener('click', () => {
+    phoneCamChaseBtn.style.color = '#38bdf8';
+    phoneCamChaseBtn.style.borderColor = '#38bdf8';
+    if (phoneCamTopDownBtn) {
+      phoneCamTopDownBtn.style.color = '#cbd5e1';
+      phoneCamTopDownBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+    }
+    if (conn && conn.open) {
+      conn.send({ type: 'parent_command', action: 'set_camera_preset', preset: 2 });
+    }
   });
 }
 

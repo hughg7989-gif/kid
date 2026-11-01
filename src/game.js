@@ -38,20 +38,23 @@ const soundEngine = new SoundEngine();
 // ==========================================
 // 2. PROCEDURAL ENVIRONMENT POPULATION (SoA)
 // ==========================================
-const COUNT_TREES = 1400;
-const COUNT_HOUSES = 300;
-const COUNT_BARNS = 120;
-const COUNT_HAYBALES = 400;
-const COUNT_TOYBLOCKS = 400;
-const COUNT_STREETLAMPS = 240;
+const COUNT_TREES = 1100;
+const COUNT_HOUSES = 240;
+const COUNT_BARNS = 90;
+const COUNT_HAYBALES = 300;
+const COUNT_TOYBLOCKS = 350;
+const COUNT_STREETLAMPS = 180;
+const COUNT_RAMPS = 80;
+const COUNT_STARS = 120;
+const COUNT_ARCHES = 35;
 
-const TOTAL_OBSTACLES = COUNT_TREES + COUNT_HOUSES + COUNT_BARNS + COUNT_HAYBALES + COUNT_TOYBLOCKS + COUNT_STREETLAMPS;
+const TOTAL_OBSTACLES = COUNT_TREES + COUNT_HOUSES + COUNT_BARNS + COUNT_HAYBALES + COUNT_TOYBLOCKS + COUNT_STREETLAMPS + COUNT_RAMPS + COUNT_STARS + COUNT_ARCHES;
 
 const obstacleSoA = {
   positions: new Float32Array(TOTAL_OBSTACLES * 2),
   radii: new Float32Array(TOTAL_OBSTACLES),
   states: new Uint8Array(TOTAL_OBSTACLES),          // 0: Active, 1: Crumbling, 2: Smashed
-  types: new Uint8Array(TOTAL_OBSTACLES),           // 0: Tree, 1: House, 2: Barn, 3: Hay, 4: Block, 5: Lamp
+  types: new Uint8Array(TOTAL_OBSTACLES),           // 0: Tree, 1: House, 2: Barn, 3: Hay, 4: Block, 5: Lamp, 6: Ramp, 7: Star, 8: Arch
   instanceIndices: new Uint32Array(TOTAL_OBSTACLES),
   crumbleProgress: new Float32Array(TOTAL_OBSTACLES),
   tipDirs: new Float32Array(TOTAL_OBSTACLES * 2),
@@ -268,8 +271,8 @@ function createTreeGeometry() {
 
   const apple1 = new THREE.SphereGeometry(0.25, 6, 6);
   apple1.translate(0.9, 4.0, 0.7);
-  const apple2 = apple1.clone();
-  apple2.translate(-1.8, 0.6, -0.4);
+  const apple2 = new THREE.SphereGeometry(0.25, 6, 6);
+  apple2.translate(-0.9, 4.6, 0.3);
 
   setGeoColor(trunk, 0x854d0e);
   setGeoColor(foliage1, 0x22c55e);
@@ -369,6 +372,66 @@ function createStreetlampGeometry() {
   return mergeGeometries([pole, arm, lamp]);
 }
 
+function createRampGeometry() {
+  const ramp = new THREE.BoxGeometry(4.4, 0.4, 6.0);
+  ramp.rotateX(0.24);
+  ramp.translate(0, 0.8, 0);
+
+  const stripe1 = new THREE.BoxGeometry(4.4, 0.45, 1.0);
+  stripe1.rotateX(0.24);
+  stripe1.translate(0, 0.8, -1.8);
+
+  const stripe2 = new THREE.BoxGeometry(4.4, 0.45, 1.0);
+  stripe2.rotateX(0.24);
+  stripe2.translate(0, 0.8, 1.2);
+
+  setGeoColor(ramp, 0xfacc15);
+  setGeoColor(stripe1, 0x0f172a);
+  setGeoColor(stripe2, 0x0f172a);
+
+  return mergeGeometries([ramp, stripe1, stripe2]);
+}
+
+function createStarGeometry() {
+  const topCone = new THREE.ConeGeometry(1.2, 1.8, 5);
+  topCone.translate(0, 0.9, 0);
+  const bottomCone = new THREE.ConeGeometry(1.2, 1.8, 5);
+  bottomCone.rotateX(Math.PI);
+  bottomCone.translate(0, -0.9, 0);
+
+  setGeoColor(topCone, 0xfacc15);
+  setGeoColor(bottomCone, 0xf59e0b);
+
+  const star = mergeGeometries([topCone, bottomCone]);
+  star.translate(0, 2.2, 0);
+  return star;
+}
+
+function createArchGeometry() {
+  const pillarL = new THREE.CylinderGeometry(0.5, 0.6, 7.0, 10);
+  pillarL.translate(-7.0, 3.5, 0);
+
+  const pillarR = new THREE.CylinderGeometry(0.5, 0.6, 7.0, 10);
+  pillarR.translate(7.0, 3.5, 0);
+
+  const beam = new THREE.BoxGeometry(15.2, 1.4, 1.4);
+  beam.translate(0, 6.6, 0);
+
+  const banner = new THREE.BoxGeometry(12.0, 1.2, 0.3);
+  banner.translate(0, 5.4, 0);
+
+  const starTop = new THREE.SphereGeometry(0.9, 8, 8);
+  starTop.translate(0, 7.8, 0);
+
+  setGeoColor(pillarL, 0x0284c7);
+  setGeoColor(pillarR, 0x0284c7);
+  setGeoColor(beam, 0xf59e0b);
+  setGeoColor(banner, 0xf8fafc);
+  setGeoColor(starTop, 0xfacc15);
+
+  return mergeGeometries([pillarL, pillarR, beam, banner, starTop]);
+}
+
 const instancedMeshes = {
   trees: new THREE.InstancedMesh(createTreeGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), COUNT_TREES),
   houses: new THREE.InstancedMesh(createHouseGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), COUNT_HOUSES),
@@ -376,6 +439,9 @@ const instancedMeshes = {
   haybales: new THREE.InstancedMesh(createHayBaleGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), COUNT_HAYBALES),
   toyblocks: new THREE.InstancedMesh(createToyBlockGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 }), COUNT_TOYBLOCKS),
   streetlamps: new THREE.InstancedMesh(createStreetlampGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), COUNT_STREETLAMPS),
+  ramps: new THREE.InstancedMesh(createRampGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), COUNT_RAMPS),
+  stars: new THREE.InstancedMesh(createStarGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, emissive: 0x553300 }), COUNT_STARS),
+  arches: new THREE.InstancedMesh(createArchGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), COUNT_ARCHES),
 };
 
 Object.values(instancedMeshes).forEach((mesh) => {
@@ -459,6 +525,9 @@ populateObstacleGroup(instancedMeshes.barns, COUNT_BARNS, 2, 3.4, false);
 populateObstacleGroup(instancedMeshes.haybales, COUNT_HAYBALES, 3, 1.4, false);
 populateObstacleGroup(instancedMeshes.toyblocks, COUNT_TOYBLOCKS, 4, 1.5, true);
 populateObstacleGroup(instancedMeshes.streetlamps, COUNT_STREETLAMPS, 5, 0.9, true);
+populateObstacleGroup(instancedMeshes.ramps, COUNT_RAMPS, 6, 2.2, true);
+populateObstacleGroup(instancedMeshes.stars, COUNT_STARS, 7, 1.8, true);
+populateObstacleGroup(instancedMeshes.arches, COUNT_ARCHES, 8, 3.8, true);
 
 // ==========================================
 // 5. VEHICLE MOUNTING & STATE WITH 3D FLIGHT
@@ -819,23 +888,48 @@ function checkCollisionsAndDrive(dt) {
               const minDist = vehicleRadius + obstacleSoA.radii[obsIdx];
 
               if (distSq < minDist * minDist) {
-                isCollidingThisFrame = true;
-                obstacleSoA.states[obsIdx] = 1;
-                obstacleSoA.crumbleProgress[obsIdx] = 0;
-                obstacleSoA.tipDirs[obsIdx * 2] = forwardX;
-                obstacleSoA.tipDirs[obsIdx * 2 + 1] = forwardZ;
-
                 const typeId = obstacleSoA.types[obsIdx];
-                const soundType = typeId === 1 ? 'house' : (typeId === 2 ? 'barn' : (typeId === 3 ? 'hay' : (typeId === 4 ? 'block' : 'tree')));
-                soundEngine.playTopple(soundType);
-                spawnParticles(ox, 2.0, oz, 16);
-
-                carState.collisionCount++;
-                const scoreText = document.getElementById('scoreText');
-                if (scoreText) scoreText.textContent = `${carState.collisionCount} Smashed!`;
-
-                if (carState.collisionCount % 10 === 0) {
+                if (typeId === 6) {
+                  // Type 6: Stunt Ramp launch!
+                  carState.vy = 22.0;
+                  carState.bonusSpeed += 12.0;
+                  carState.isAirborne = true;
+                  soundEngine.playRampLaunch();
+                  spawnParticles(carState.x, 1.5, carState.z, 28);
+                  showGameNotification('🚀 MEGA STUNT RAMP!', 1400);
+                } else if (typeId === 7) {
+                  // Type 7: Star Collectible!
+                  obstacleSoA.states[obsIdx] = 2; // collected
+                  soundEngine.playChime();
+                  carState.collisionCount += 5;
+                  spawnParticles(ox, 2.4, oz, 24);
+                  showGameNotification('⭐ STAR COLLECTED! +5', 1200);
+                  const scoreText = document.getElementById('scoreText');
+                  if (scoreText) scoreText.textContent = `${carState.collisionCount} Smashed & Stars!`;
+                } else if (typeId === 8) {
+                  // Type 8: Checkpoint Arch!
                   soundEngine.playCheer();
+                  carState.bonusSpeed += 8.0;
+                  spawnParticles(ox, 5.0, oz, 32);
+                  showGameNotification('🏁 SPEED CHECKPOINT PASSED!', 1500);
+                } else {
+                  isCollidingThisFrame = true;
+                  obstacleSoA.states[obsIdx] = 1;
+                  obstacleSoA.crumbleProgress[obsIdx] = 0;
+                  obstacleSoA.tipDirs[obsIdx * 2] = forwardX;
+                  obstacleSoA.tipDirs[obsIdx * 2 + 1] = forwardZ;
+
+                  const soundType = typeId === 1 ? 'house' : (typeId === 2 ? 'barn' : (typeId === 3 ? 'hay' : (typeId === 4 ? 'block' : 'tree')));
+                  soundEngine.playTopple(soundType);
+                  spawnParticles(ox, 2.0, oz, 16);
+
+                  carState.collisionCount++;
+                  const scoreText = document.getElementById('scoreText');
+                  if (scoreText) scoreText.textContent = `${carState.collisionCount} Smashed & Stars!`;
+
+                  if (carState.collisionCount % 10 === 0) {
+                    soundEngine.playCheer();
+                  }
                 }
               }
             }
@@ -874,6 +968,15 @@ function checkCollisionsAndDrive(dt) {
 // ==========================================
 export const DEFAULT_CAMERA_PRESETS = {
   1: {
+    name: 'Free Mouse Orbit ⭐',
+    mode: 'free',
+    dist: 18.0,
+    height: 8.5,
+    targetHeight: 1.2,
+    followRotation: false,
+    smoothSpeed: 6.0,
+  },
+  2: {
     name: 'Chase Follow',
     mode: 'chase',
     dist: 17.0,
@@ -882,7 +985,7 @@ export const DEFAULT_CAMERA_PRESETS = {
     followRotation: true,
     smoothSpeed: 5.0,
   },
-  2: {
+  3: {
     name: 'Fixed North (Unmoved)',
     mode: 'fixed_north',
     dist: 18.0,
@@ -890,15 +993,6 @@ export const DEFAULT_CAMERA_PRESETS = {
     targetHeight: 1.2,
     followRotation: false,
     smoothSpeed: 6.0,
-  },
-  3: {
-    name: 'High Isometric',
-    mode: 'isometric',
-    dist: 24.0,
-    height: 18.0,
-    targetHeight: 1.0,
-    followRotation: false,
-    smoothSpeed: 5.5,
   },
   4: {
     name: 'Top-Down Bird Eye',
@@ -908,6 +1002,15 @@ export const DEFAULT_CAMERA_PRESETS = {
     targetHeight: 0.5,
     followRotation: false,
     smoothSpeed: 7.0,
+  },
+  5: {
+    name: 'High Isometric',
+    mode: 'isometric',
+    dist: 24.0,
+    height: 18.0,
+    targetHeight: 1.0,
+    followRotation: false,
+    smoothSpeed: 5.5,
   },
 };
 
@@ -922,9 +1025,9 @@ if (savedCustomPresets) {
 let activePresetSlot = parseInt(localStorage.getItem('toycar_active_cam_slot') || '1', 10);
 let cameraConfig = { ...(cameraPresets[activePresetSlot] || cameraPresets[1]) };
 
-// Free Orbit Camera state
+// Free Orbit Camera state with ideal default angle (elevated behind car looking North)
 let freeCamAzimuth = 0;
-let freeCamElevation = 0.52;
+let freeCamElevation = 0.44;
 let isFreeCamDragging = false;
 let lastMouseX = 0;
 let lastMouseY = 0;
@@ -1209,7 +1312,7 @@ export async function loadCustomVehicleScript(codeString, fileName = 'custom_car
     const customDef = module.default || module.Vehicle || module.ExcavatorVehicle || Object.values(module)[0];
 
     if (!customDef || typeof customDef.createMesh !== 'function') {
-      alert('Custom vehicle file must export an object with createMesh(THREE, mergeGeometries).');
+      showGameNotification('⚠️ Invalid vehicle file: missing createMesh()', 2500);
       return;
     }
 
@@ -1229,18 +1332,23 @@ export async function loadCustomVehicleScript(codeString, fileName = 'custom_car
     localStorage.setItem('toycar_custom_js', cleanCode);
     localStorage.setItem('toycar_custom_name', customDef.name);
 
-    rebuildVehicleMenu();
+    rebuildVehicleGarageList();
+    rebuildVehicleDockMenu();
     mountVehicle(customDef);
 
-    const hornBubble = document.getElementById('hornBubble');
-    if (hornBubble) {
-      hornBubble.textContent = `🚀 Loaded ${customDef.name}!`;
-      hornBubble.classList.add('active');
-      setTimeout(() => hornBubble.classList.remove('active'), 1200);
-    }
+    showGameNotification(`🚀 Loaded ${customDef.name}!`, 1500);
   } catch (err) {
     console.error('Failed to load custom vehicle:', err);
-    alert('Error loading vehicle script: ' + err.message);
+    showGameNotification('⚠️ Error loading vehicle: ' + err.message, 3000);
+  }
+}
+
+function showGameNotification(text, duration = 1500) {
+  const hornBubble = document.getElementById('hornBubble');
+  if (hornBubble) {
+    hornBubble.textContent = text;
+    hornBubble.classList.add('active');
+    setTimeout(() => hornBubble.classList.remove('active'), duration);
   }
 }
 
@@ -1330,10 +1438,13 @@ const pasteCodeInput = document.getElementById('pasteCodeInput');
 const mountPastedCodeBtn = document.getElementById('mountPastedCodeBtn');
 
 // Master AI Vehicle Prompt text
-export const MASTER_AI_PROMPT = `Generate a single, completely self-contained JavaScript ES module file (.js) for a 3D browser game vehicle.
+export const MASTER_AI_PROMPT = `Generate a single, completely self-contained JavaScript ES module file (.js) for a high-quality 3D browser game vehicle.
 
 VEHICLE DESCRIPTION / REFERENCE:
-[USER INSTRUCTION: Describe your vehicle here, e.g. "Yellow Caterpillar Excavator with digging bucket", "Red Monster Truck with giant spiky wheels", "Police Cruiser with sirens", OR attach an image and say "Create this exact vehicle from the image"]
+[USER INSTRUCTION: Describe your vehicle in detail, e.g. "Yellow Caterpillar Excavator with digging bucket", "Red Monster Truck with giant spiky wheels", "Police Cruiser with sirens", OR attach an image and say "Create this exact vehicle from the image"]
+
+ACCURATE COLOR AND DESIGN MATCHING FROM REFERENCE IMAGES:
+When a reference image of a vehicle is provided, meticulously analyze the exact color-blocking, patterns, decals, and section layouts (e.g., specific placement of red bumpers, yellow hoods, blue cabins, or accents). Map each distinct region of the car to its exact corresponding geometry coordinate and color hex code rather than applying a generic or simplified color scheme. Pay extraordinary attention to exact proportions, distinct multi-part color separation, window trims, headlights, taillights, roof racks, and wheel rim details so the 3D model looks as close to the reference photo as possible.
 
 SPEED BENCHMARK & CALIBRATION:
 The game's standard baseline is the Normal Toy Sports Car with baseSpeed = 11.0 m/s.
@@ -1347,13 +1458,14 @@ Calibrate your vehicle's speed realistically using this 11.0 m/s benchmark:
 - Formula 1 / Rocket Hypercar: baseSpeed = 15.0 - 16.0 m/s
 Choose the \`baseSpeed\` and \`minSlowdownSpeed\` (3.0 - 4.5) relative to the 11.0 baseline.
 
-TECHNICAL RULES:
-1. Do NOT write \`import * as THREE from 'three'\`. The game engine passes THREE and mergeGeometries into createMesh(THREE, mergeGeometries).
-2. Assemble composite 3D procedural geometries using Three.js primitives (BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry).
-3. Set vertex colors on each component using \`setGeoColor(geometry, hexColor)\` helper.
-4. Merge all static body parts into ONE single draw-call mesh via \`mergeGeometries([...])\`.
-5. The vehicle points forward along the +Z axis.
-6. Return { group, wheels } where wheels is an array of wheel groups so they spin automatically.
+CRITICAL TECHNICAL RULES (PREVENT TECHNICAL / METHOD ERRORS):
+1. When generating Three.js geometries for procedural vehicles, never use .clone() on geometries before modifying or setting vertex colors, because cloned geometries may not initialize position attributes properly in this runtime environment. Always create separate primitive geometries directly (e.g., new THREE.BoxGeometry(...)) or ensure vertex color helper functions check for valid position attributes.
+2. Do NOT write \`import * as THREE from 'three'\`. The game engine passes THREE and mergeGeometries into createMesh(THREE, mergeGeometries).
+3. Assemble composite 3D procedural geometries using Three.js primitives (BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry).
+4. Set vertex colors on each component using \`setGeoColor(geometry, hexColor)\` helper.
+5. Merge all static body parts into ONE single draw-call mesh via \`mergeGeometries([...])\`.
+6. The vehicle points forward along the +Z axis.
+7. Return { group, wheels } where wheels is an array of wheel groups so they spin automatically.
 
 OUTPUT FORMAT:
 Output ONLY the raw JavaScript code inside a single \`\`\`javascript code block:
@@ -1362,7 +1474,7 @@ export default {
   id: 'custom_vehicle_id',
   name: 'Vehicle Name',
   icon: '🚜',
-  baseSpeed: 10.0, // Choose relative to normal car reference (11.0 m/s)
+  baseSpeed: 10.0,
   minSlowdownSpeed: 3.5,
   soundPitch: 50, // 40 = heavy diesel rumble, 65 = sports car hum, 75 = high rev
   hornFrequencies: [349.23, 440.0],
@@ -1370,7 +1482,7 @@ export default {
   createMesh(THREE, mergeGeometries) {
     const group = new THREE.Group();
 
-    // 1. Procedural Parts...
+    // High-Fidelity Multi-Part Body with Exact Color-Blocking
     const chassis = new THREE.BoxGeometry(2.2, 0.8, 4.0);
     chassis.translate(0, 0.7, 0);
 
@@ -1379,7 +1491,8 @@ export default {
 
     const setGeoColor = (geo, colorHex) => {
       const col = new THREE.Color(colorHex);
-      const count = geo.attributes.position.count;
+      const count = geo.attributes && geo.attributes.position ? geo.attributes.position.count : 0;
+      if (count === 0) return;
       const colors = new Float32Array(count * 3);
       for (let i = 0; i < count; i++) {
         colors[i * 3] = col.r;
@@ -1461,7 +1574,7 @@ if (mountPastedCodeBtn && pasteCodeInput) {
   mountPastedCodeBtn.addEventListener('click', () => {
     let code = pasteCodeInput.value.trim();
     if (!code) {
-      alert('Please paste some vehicle JavaScript code first.');
+      showGameNotification('⚠️ Please paste vehicle code first', 2000);
       return;
     }
     loadCustomVehicleScript(code, 'ai_vehicle.js');
@@ -1533,6 +1646,17 @@ function initHostPeer() {
       if (connStatusText) connStatusText.textContent = 'PHONE CONNECTED 📱';
       if (inputModeValue) inputModeValue.textContent = 'Phone Gyro 3D';
 
+      // Start live 3D gameplay video stream to phone!
+      if (renderer.domElement.captureStream && peer) {
+        try {
+          const stream = renderer.domElement.captureStream(25);
+          peer.call(conn.peer, stream);
+          console.log('Initiated live 3D gameplay canvas stream to phone:', conn.peer);
+        } catch (err) {
+          console.warn('captureStream error:', err);
+        }
+      }
+
       // Send active vehicle to phone so phone displays top-down mirror
       conn.send({
         type: 'parent_command',
@@ -1578,6 +1702,14 @@ function initHostPeer() {
         // Vertical lift (only once on land!)
         if (data.lift && data.lift > 0) {
           triggerJump(data.lift);
+        }
+      } else if (data.type === 'parent_command') {
+        if (data.action === 'set_camera_preset') {
+          applyCameraPreset(data.preset);
+        } else if (data.action === 'recenter') {
+          carState.angle = 0;
+          carState.targetAngle = 0;
+          showGameNotification('🎯 Re-Centered Direction!', 1200);
         }
       }
     });
@@ -1700,140 +1832,287 @@ function handleKeyboardInput(dt) {
 }
 
 // ==========================================
-// 12. UI & VEHICLE SELECTOR MENU
+// 12. VEHICLE GARAGE & MANAGER (List, Rename, Delete, Export)
 // ==========================================
-function rebuildVehicleMenu() {
-  const vehicleMenuContainer = document.getElementById('vehicleMenu');
-  if (!vehicleMenuContainer) return;
-  vehicleMenuContainer.innerHTML = '';
+let vehicleRenames = {};
+try {
+  vehicleRenames = JSON.parse(localStorage.getItem('toycar_vehicle_renames') || '{}');
+} catch (e) {}
 
-  VEHICLES.forEach((v) => {
+let deletedVehicleIds = new Set();
+try {
+  deletedVehicleIds = new Set(JSON.parse(localStorage.getItem('toycar_deleted_vehicles') || '[]'));
+} catch (e) {}
+
+// Apply persisted renames
+VEHICLES.forEach((v) => {
+  if (vehicleRenames[v.id]) {
+    v.name = vehicleRenames[v.id];
+  }
+});
+
+const vehicleGarageModal = document.getElementById('vehicleGarageModal');
+const openGarageBtn = document.getElementById('openGarageBtn');
+const closeGarageModalBtn = document.getElementById('closeGarageModalBtn');
+const garageVehicleList = document.getElementById('garageVehicleList');
+const garageCountBadge = document.getElementById('garageCountBadge');
+const garageCountDock = document.getElementById('garageCountDock');
+const activeCarIconDock = document.getElementById('activeCarIconDock');
+const activeCarNameDock = document.getElementById('activeCarNameDock');
+const vehicleQuickPills = document.getElementById('vehicleQuickPills');
+const garageOpenAiBtn = document.getElementById('garageOpenAiBtn');
+
+function getActiveVehicles() {
+  return VEHICLES.filter(v => !deletedVehicleIds.has(v.id));
+}
+
+export function rebuildVehicleGarageList() {
+  if (!garageVehicleList) return;
+  garageVehicleList.innerHTML = '';
+
+  const activeList = getActiveVehicles();
+
+  if (activeList.length === 0) {
+    garageVehicleList.innerHTML = `<div style="text-align: center; padding: 24px; color: #94a3b8;">No vehicles in garage. <button id="restoreDefaultsBtn" style="color: #38bdf8; background: none; border: none; text-decoration: underline; cursor: pointer;">↺ Restore default cars</button></div>`;
+    const restoreBtn = document.getElementById('restoreDefaultsBtn');
+    if (restoreBtn) {
+      restoreBtn.addEventListener('click', () => {
+        deletedVehicleIds.clear();
+        localStorage.removeItem('toycar_deleted_vehicles');
+        rebuildVehicleGarageList();
+        rebuildVehicleDockMenu();
+        showGameNotification('✓ Default vehicles restored!', 1200);
+      });
+    }
+    return;
+  }
+
+  activeList.forEach((v) => {
+    const isCurrent = v.id === currentVehicleDef.id;
+    const item = document.createElement('div');
+    item.className = `garage-item ${isCurrent ? 'active' : ''}`;
+
+    const isCustom = v.id.startsWith('custom_') || v.id === 'excavator';
+    const typeLabel = isCustom ? 'Custom / AI' : 'Standard';
+
+    item.innerHTML = `
+      <div class="car-info-col">
+        <div class="car-avatar">${v.icon || '🏎️'}</div>
+        <div class="car-meta">
+          <div class="car-name-row">
+            <span class="car-title-text" id="nameDisplay_${v.id}">${v.name}</span>
+            <span class="car-type-badge">${typeLabel}</span>
+            ${isCurrent ? '<span style="font-size: 11px; color: #34d399; font-weight: 800;">● Active</span>' : ''}
+          </div>
+          <div class="car-stats-sub">
+            <span>⚡ ${v.baseSpeed.toFixed(1)} m/s</span>
+            <span>🔊 Pitch: ${v.soundPitch || 60}Hz</span>
+          </div>
+        </div>
+      </div>
+      <div class="car-actions-row">
+        ${!isCurrent ? `<button class="btn-garage-action btn-drive-now" data-action="drive" data-id="${v.id}">🏎️ Drive</button>` : `<button class="btn-garage-action" style="border-color: #34d399; color: #34d399;" disabled>✓ Driving</button>`}
+        <button class="btn-garage-action" data-action="rename" data-id="${v.id}">✏️ Rename</button>
+        <button class="btn-garage-action" data-action="export" data-id="${v.id}" title="Download .js file">💾 Export</button>
+        ${activeList.length > 1 ? `<button class="btn-garage-action btn-delete-car" data-action="delete" data-id="${v.id}">🗑️</button>` : ''}
+      </div>
+    `;
+
+    // Bind item buttons
+    item.querySelectorAll('button[data-action]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const vid = btn.dataset.id;
+        const targetV = VEHICLES.find(car => car.id === vid);
+        if (!targetV) return;
+
+        if (action === 'drive') {
+          soundEngine.init(targetV);
+          mountVehicle(targetV);
+          rebuildVehicleGarageList();
+          rebuildVehicleDockMenu();
+          showGameNotification(`🏎️ Driving ${targetV.name}!`, 1200);
+        } else if (action === 'rename') {
+          const currentName = targetV.name;
+          const newName = window.prompt(`Rename "${currentName}" to:`, currentName);
+          if (newName && newName.trim().length > 0) {
+            targetV.name = newName.trim();
+            vehicleRenames[targetV.id] = targetV.name;
+            localStorage.setItem('toycar_vehicle_renames', JSON.stringify(vehicleRenames));
+            rebuildVehicleGarageList();
+            rebuildVehicleDockMenu();
+            showGameNotification(`✓ Renamed to ${targetV.name}!`, 1200);
+          }
+        } else if (action === 'export') {
+          exportVehicleScript(targetV);
+        } else if (action === 'delete') {
+          if (confirm(`Remove "${targetV.name}" from your garage?`)) {
+            deletedVehicleIds.add(targetV.id);
+            localStorage.setItem('toycar_deleted_vehicles', JSON.stringify([...deletedVehicleIds]));
+            if (currentVehicleDef.id === targetV.id) {
+              const remaining = getActiveVehicles();
+              if (remaining.length > 0) {
+                mountVehicle(remaining[0]);
+              }
+            }
+            rebuildVehicleGarageList();
+            rebuildVehicleDockMenu();
+            showGameNotification(`🗑️ Removed ${targetV.name}`, 1200);
+          }
+        }
+      });
+    });
+
+    garageVehicleList.appendChild(item);
+  });
+}
+
+export function exportVehicleScript(v) {
+  let code = v._sourceCode;
+  if (!code) {
+    code = `/* Self-contained ${v.name} Vehicle ES Module */
+export default {
+  id: '${v.id}',
+  name: '${v.name}',
+  icon: '${v.icon || '🏎️'}',
+  baseSpeed: ${v.baseSpeed || 11.0},
+  minSlowdownSpeed: ${v.minSlowdownSpeed || 4.0},
+  soundPitch: ${v.soundPitch || 60},
+  hornFrequencies: ${JSON.stringify(v.hornFrequencies || [349.23, 440.0])},
+  engineType: '${v.engineType || 'sawtooth'}',
+  createMesh: ${v.createMesh.toString()}
+};
+`;
+  }
+  const blob = new Blob([code], { type: 'application/javascript' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${v.id}.js`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showGameNotification(`💾 Downloaded ${v.name}.js`, 1500);
+}
+
+export function rebuildVehicleDockMenu() {
+  const activeList = getActiveVehicles();
+  if (garageCountDock) garageCountDock.textContent = activeList.length;
+  if (garageCountBadge) garageCountBadge.textContent = activeList.length;
+
+  if (activeCarIconDock) activeCarIconDock.textContent = currentVehicleDef.icon || '🏎️';
+  if (activeCarNameDock) activeCarNameDock.textContent = currentVehicleDef.name;
+
+  if (!vehicleQuickPills) return;
+  vehicleQuickPills.innerHTML = '';
+
+  // Show up to 3 quick-switch pills for clean uncluttered layout
+  activeList.slice(0, 4).forEach((v) => {
+    if (v.id === currentVehicleDef.id) return;
     const btn = document.createElement('button');
-    btn.className = `vehicle-select-btn ${v.id === currentVehicleDef.id ? 'active' : ''}`;
+    btn.className = 'vehicle-select-btn';
     btn.innerHTML = `<span class="v-icon">${v.icon}</span><span class="v-label">${v.name}</span>`;
     btn.addEventListener('click', () => {
       soundEngine.init(v);
       mountVehicle(v);
-      document.querySelectorAll('.vehicle-select-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      rebuildVehicleDockMenu();
     });
-    vehicleMenuContainer.appendChild(btn);
+    vehicleQuickPills.appendChild(btn);
   });
 }
 
-rebuildVehicleMenu();
+rebuildVehicleGarageList();
+rebuildVehicleDockMenu();
 
-if (desktopModeBtn) {
-  desktopModeBtn.addEventListener('click', () => {
-    soundEngine.init(currentVehicleDef);
-    if (pairingOverlay) pairingOverlay.classList.add('hidden');
-    if (connStatusText) connStatusText.textContent = 'KEYBOARD ACTIVE ⌨️';
-    if (inputModeValue) inputModeValue.textContent = 'Keyboard Steer';
+if (openGarageBtn && vehicleGarageModal) {
+  openGarageBtn.addEventListener('click', () => {
+    rebuildVehicleGarageList();
+    vehicleGarageModal.style.display = 'flex';
   });
 }
-
-const reopenPairingBtn = document.getElementById('reopenPairingBtn');
-if (reopenPairingBtn) {
-  reopenPairingBtn.addEventListener('click', () => {
-    if (pairingOverlay) pairingOverlay.classList.remove('hidden');
+if (closeGarageModalBtn && vehicleGarageModal) {
+  closeGarageModalBtn.addEventListener('click', () => {
+    vehicleGarageModal.style.display = 'none';
   });
 }
-
-const audioToggleBtn = document.getElementById('audioToggleBtn');
-if (audioToggleBtn) {
-  audioToggleBtn.addEventListener('click', () => {
-    soundEngine.init(currentVehicleDef);
-    const isMuted = soundEngine.toggleMute();
-    audioToggleBtn.textContent = isMuted ? '🔇' : '🔊';
-  });
-}
-
-const resetCodeBtn = document.getElementById('resetCodeBtn');
-if (resetCodeBtn) {
-  resetCodeBtn.addEventListener('click', () => {
-    localStorage.removeItem('toycar_pc_room_code');
-    window.location.reload();
-  });
-}
-
-const bottomDock = document.getElementById('bottomDock');
-const toggleDockBtn = document.getElementById('toggleDockBtn');
-if (toggleDockBtn && bottomDock) {
-  toggleDockBtn.addEventListener('click', () => {
-    bottomDock.classList.toggle('collapsed');
-    toggleDockBtn.textContent = bottomDock.classList.contains('collapsed')
-      ? '▴ Show Controls'
-      : '▾ Hide Controls';
+if (garageOpenAiBtn && aiPromptModal) {
+  garageOpenAiBtn.addEventListener('click', () => {
+    if (vehicleGarageModal) vehicleGarageModal.style.display = 'none';
+    aiPromptModal.style.display = 'flex';
   });
 }
 
 // ==========================================
-// 12B. CAMERA PERSPECTIVE MODAL & TUNING
+// 12B. ALIGNMENT & PRE-CONFIGURATION MODAL
 // ==========================================
-const cameraModal = document.getElementById('cameraModal');
-const cameraPanelBtn = document.getElementById('cameraPanelBtn');
-const closeCameraModalBtn = document.getElementById('closeCameraModalBtn');
+const alignmentModal = document.getElementById('alignmentModal');
+const alignHudBtn = document.getElementById('alignHudBtn');
+const dockAlignBtn = document.getElementById('dockAlignBtn');
+const closeAlignmentModalBtn = document.getElementById('closeAlignmentModalBtn');
+const lockAlignmentBtn = document.getElementById('lockAlignmentBtn');
+const flip180PCBtn = document.getElementById('flip180PCBtn');
+const resetAlignmentBtn = document.getElementById('resetAlignmentBtn');
 
-const camDistSlider = document.getElementById('camDistSlider');
-const camDistVal = document.getElementById('camDistVal');
-const camHeightSlider = document.getElementById('camHeightSlider');
-const camHeightVal = document.getElementById('camHeightVal');
-const camTargetHeightSlider = document.getElementById('camTargetHeightSlider');
-const camTargetHeightVal = document.getElementById('camTargetHeightVal');
-const toggleCamFollowRotBtn = document.getElementById('toggleCamFollowRotBtn');
-const copyCamConfigBtn = document.getElementById('copyCamConfigBtn');
-const resetCamDefaultsBtn = document.getElementById('resetCamDefaultsBtn');
+let phoneFlip180State = localStorage.getItem('toycar_phone_flip180') === '1';
 
-function syncCameraSlidersToConfig() {
-  if (camDistSlider) camDistSlider.value = cameraConfig.dist;
-  if (camDistVal) camDistVal.textContent = cameraConfig.dist.toFixed(1) + 'm';
-  if (camHeightSlider) camHeightSlider.value = cameraConfig.height;
-  if (camHeightVal) camHeightVal.textContent = cameraConfig.height.toFixed(1) + 'm';
-  if (camTargetHeightSlider) camTargetHeightSlider.value = cameraConfig.targetHeight || 1.2;
-  if (camTargetHeightVal) camTargetHeightVal.textContent = (cameraConfig.targetHeight || 1.2).toFixed(1) + 'm';
-
-  if (toggleCamFollowRotBtn) {
-    toggleCamFollowRotBtn.classList.toggle('active-green', cameraConfig.followRotation);
-    toggleCamFollowRotBtn.textContent = cameraConfig.followRotation
-      ? '✓ Follows Car Rotation: ON'
-      : '✕ Fixed North (Unmoved): ACTIVE';
-  }
-
-  document.querySelectorAll('.preset-pill-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.preset == activePresetSlot || (cameraConfig.mode === 'free' && b.dataset.preset === 'free'));
+if (alignHudBtn && alignmentModal) {
+  alignHudBtn.addEventListener('click', () => {
+    alignmentModal.style.display = 'flex';
+  });
+}
+if (dockAlignBtn && alignmentModal) {
+  dockAlignBtn.addEventListener('click', () => {
+    alignmentModal.style.display = 'flex';
+  });
+}
+if (closeAlignmentModalBtn && alignmentModal) {
+  closeAlignmentModalBtn.addEventListener('click', () => {
+    alignmentModal.style.display = 'none';
   });
 }
 
-function applyCameraPreset(slotNumOrMode) {
-  if (slotNumOrMode === 'free') {
-    cameraConfig.mode = 'free';
-    cameraConfig.followRotation = false;
-  } else {
-    activePresetSlot = parseInt(slotNumOrMode, 10);
-    localStorage.setItem('toycar_active_cam_slot', activePresetSlot);
-    cameraConfig = { ...(cameraPresets[activePresetSlot] || cameraPresets[1]) };
-  }
-  syncCameraSlidersToConfig();
-}
-
-if (cameraPanelBtn && cameraModal) {
-  cameraPanelBtn.addEventListener('click', () => {
-    syncCameraSlidersToConfig();
-    cameraModal.style.display = 'flex';
-  });
-}
-if (closeCameraModalBtn && cameraModal) {
-  closeCameraModalBtn.addEventListener('click', () => {
-    cameraModal.style.display = 'none';
+if (lockAlignmentBtn) {
+  lockAlignmentBtn.addEventListener('click', () => {
+    carState.angle = 0;
+    carState.targetAngle = 0;
+    if (activeConnection && activeConnection.open) {
+      activeConnection.send({ type: 'parent_command', action: 'recenter' });
+    }
+    showGameNotification('🎯 1-to-1 Direction Aligned & Locked!', 1500);
+    if (alignmentModal) alignmentModal.style.display = 'none';
   });
 }
 
-// Preset button handlers
-['1', '2', '3', '4', 'Free'].forEach(id => {
+if (flip180PCBtn) {
+  flip180PCBtn.addEventListener('click', () => {
+    phoneFlip180State = !phoneFlip180State;
+    localStorage.setItem('toycar_phone_flip180', phoneFlip180State ? '1' : '0');
+    if (activeConnection && activeConnection.open) {
+      activeConnection.send({ type: 'parent_command', action: 'toggle_flip180', flip: phoneFlip180State });
+    }
+    flip180PCBtn.textContent = phoneFlip180State ? '✓ Flipped 180°: ACTIVE' : '🔄 Flip 180° (Phone Backwards)';
+    showGameNotification(phoneFlip180State ? '🔄 Flipped 180° Front/Back' : '↺ Restored Normal Heading', 1500);
+  });
+}
+
+if (resetAlignmentBtn) {
+  resetAlignmentBtn.addEventListener('click', () => {
+    carState.angle = 0;
+    carState.targetAngle = 0;
+    if (activeConnection && activeConnection.open) {
+      activeConnection.send({ type: 'parent_command', action: 'recenter' });
+    }
+    showGameNotification('↺ Heading Reset to 0° North', 1200);
+  });
+}
+
+// Preset button handlers: 1: Free Orbit, 2: Chase, 3: Fixed North, 4: Top-Down, 5: Isometric
+['1', '2', '3', '4', '5'].forEach(id => {
   const btn = document.getElementById(`camPreset${id}Btn`);
   if (btn) {
     btn.addEventListener('click', () => {
-      applyCameraPreset(id.toLowerCase());
+      applyCameraPreset(id);
     });
   }
 });
