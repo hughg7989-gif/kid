@@ -9,7 +9,6 @@
     <meta property="og:description" content="High-performance 3D toddler toy car game controlled by smartphone compass via WebRTC." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <!-- SVG Favicon to avoid 404 error -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>" />
 
     <!-- CDN Libraries: Three.js r128, BufferGeometryUtils, PeerJS, QRCode.js -->
@@ -41,6 +40,39 @@
         z-index: 1;
         width: 100%;
         height: 100%;
+      }
+
+      /* Drag & Drop Visual Overlay */
+      #dropOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: rgba(15, 23, 42, 0.85);
+        border: 4px dashed #38bdf8;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        color: #ffffff;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      #dropOverlay.active {
+        opacity: 1;
+      }
+      .drop-icon {
+        font-size: 64px;
+      }
+      .drop-title {
+        font-size: 28px;
+        font-weight: 900;
+        color: #38bdf8;
+      }
+      .drop-sub {
+        font-size: 15px;
+        color: #94a3b8;
       }
 
       /* Startup / Pairing Overlay */
@@ -264,7 +296,7 @@
         flex-direction: column;
         align-items: center;
         gap: 6px;
-        max-width: 90vw;
+        max-width: 94vw;
       }
       .bottom-dock {
         background: rgba(15, 23, 42, 0.88);
@@ -274,7 +306,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         backdrop-filter: blur(10px);
         box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
         transition: transform 0.3s ease;
@@ -282,43 +314,30 @@
       .bottom-dock.collapsed {
         transform: translateY(125%);
       }
-      .dock-row-stats {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        width: 100%;
-        justify-content: center;
-      }
-      .dock-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 2px;
-        font-size: 11px;
-        font-weight: 600;
-        color: #94a3b8;
-      }
-      .dock-value {
-        font-size: 14px;
-        font-weight: 800;
-        color: #38bdf8;
-      }
 
-      /* Vehicle Selector Buttons */
-      .vehicle-menu {
+      /* Vehicle Selector Row */
+      .vehicle-row {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .vehicle-menu {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         background: rgba(0, 0, 0, 0.3);
-        padding: 6px 10px;
-        border-radius: 16px;
+        padding: 5px 8px;
+        border-radius: 14px;
+        flex-wrap: wrap;
       }
       .vehicle-select-btn {
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.15);
         color: #f1f5f9;
-        padding: 6px 14px;
-        border-radius: 12px;
+        padding: 6px 12px;
+        border-radius: 10px;
         font-size: 12px;
         font-weight: 700;
         cursor: pointer;
@@ -337,24 +356,86 @@
         box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
       }
       .v-icon {
-        font-size: 16px;
+        font-size: 15px;
       }
 
-      .btn-invert-pc {
+      .btn-add-vehicle {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #ffffff;
+        border: 1px solid #34d399;
+        padding: 6px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        transition: transform 0.1s;
+      }
+      .btn-add-vehicle:hover {
+        filter: brightness(1.1);
+      }
+
+      .btn-download-template {
+        background: transparent;
+        border: 1px dashed rgba(255, 255, 255, 0.25);
+        color: #94a3b8;
+        padding: 5px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn-download-template:hover {
+        color: #ffffff;
+        border-color: #ffffff;
+      }
+
+      /* Stats & Toggles Row */
+      .dock-row-stats {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .dock-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #94a3b8;
+      }
+      .dock-value {
+        font-size: 13px;
+        font-weight: 800;
+        color: #38bdf8;
+      }
+
+      .btn-hud-toggle {
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.18);
         color: #cbd5e1;
-        padding: 6px 12px;
-        border-radius: 10px;
+        padding: 5px 10px;
+        border-radius: 9px;
         font-size: 11px;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.15s ease;
       }
-      .btn-invert-pc.active {
+      .btn-hud-toggle.active {
         background: #ec4899;
         color: #ffffff;
         border-color: #f472b6;
+      }
+      .btn-hud-toggle.active-green {
+        background: #10b981;
+        color: #ffffff;
+        border-color: #34d399;
       }
 
       .dock-toggle-btn {
@@ -372,12 +453,12 @@
       /* Horn comic bubble popup */
       .horn-bubble {
         position: absolute;
-        top: 38%;
+        top: 36%;
         left: 50%;
         transform: translate(-50%, -50%) scale(0);
         background: #f59e0b;
         color: #000;
-        font-size: 34px;
+        font-size: 32px;
         font-weight: 900;
         padding: 12px 28px;
         border-radius: 30px;
@@ -398,6 +479,16 @@
     <!-- 3D WebGL Canvas Container -->
     <div id="canvas-container"></div>
 
+    <!-- Drag & Drop JS Car Overlay -->
+    <div id="dropOverlay">
+      <div class="drop-icon">🏎️ ➕</div>
+      <div class="drop-title">Drop your Custom Vehicle .js here!</div>
+      <div class="drop-sub">The vehicle will be loaded and ready to drive instantly</div>
+    </div>
+
+    <!-- Hidden file input for opening vehicle folder -->
+    <input type="file" id="addVehicleFileInput" accept=".js" style="display: none;" />
+
     <!-- Startup / Pairing UI -->
     <div id="pairingOverlay">
       <div class="pairing-card">
@@ -407,7 +498,7 @@
         </div>
         <div class="pairing-subtitle">Scan once — phone remembers connection!</div>
         <p class="pairing-desc">
-          Mount phone <strong>flat</strong> on the toy vehicle. Drive infinitely down roads and across farm meadows!
+          Mount phone <strong>flat</strong> on the toy car. Drive down roads, smash through toy blocks, or toss the car in God Mode!
         </p>
 
         <!-- QR Code container -->
@@ -427,7 +518,7 @@
             <span>Open Phone Controller (New Tab)</span>
           </a>
           <button id="desktopModeBtn" class="btn-desktop-mode">
-            🎮 Play with Keyboard (Left / Right Arrows)
+            🎮 Play with Keyboard (Arrows + Space to Toss)
           </button>
           <button id="resetCodeBtn" class="btn-reset-code">Generate New Room Code</button>
         </div>
@@ -458,13 +549,22 @@
       </div>
 
       <div class="dock-container">
-        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles &amp; Controls</button>
+        <button id="toggleDockBtn" class="dock-toggle-btn">▾ Vehicles, God Mode &amp; Custom Car</button>
         <div id="bottomDock" class="bottom-dock">
-          <!-- Vehicle Selector Menu -->
-          <div id="vehicleMenu" class="vehicle-menu">
-            <!-- Dynamically populated from /src/vehicles/index.js -->
+          <!-- Vehicle Selector Row -->
+          <div class="vehicle-row">
+            <div id="vehicleMenu" class="vehicle-menu"></div>
+            <!-- Add Car Button (File Picker) -->
+            <button id="addVehicleBtn" class="btn-add-vehicle" onclick="document.getElementById('addVehicleFileInput').click()">
+              <span>📁</span>
+              <span>+ Add Car .js</span>
+            </button>
+            <button id="downloadTemplateBtn" class="btn-download-template" title="Download sample custom vehicle code">
+              📥 Sample .js
+            </button>
           </div>
 
+          <!-- Stats & God Mode Row -->
           <div class="dock-row-stats">
             <div class="dock-item">
               <span>SPEED</span>
@@ -478,7 +578,9 @@
               <span>MODE</span>
               <span id="inputModeValue" class="dock-value">Endless Cruise</span>
             </div>
-            <button id="invertTogglePCBtn" class="btn-invert-pc">🔄 Invert Steering: OFF</button>
+            <button id="godModePCBtn" class="btn-hud-toggle active-green">🚀 God Mode: ON</button>
+            <button id="tossJumpPCBtn" class="btn-hud-toggle" style="color: #facc15;">🚀 Toss in Air (Space)</button>
+            <button id="invertTogglePCBtn" class="btn-hud-toggle">🔄 Invert: OFF</button>
           </div>
         </div>
       </div>

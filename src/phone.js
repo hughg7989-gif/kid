@@ -1,17 +1,27 @@
-/* Mobile Steering Controller Logic with Invert & Persistent Pairing */
+/* Mobile Steering Controller Logic with Invert, God Mode Motion & Persistent Pairing */
 
 // --- State & Variables ---
 let zeroOffset = 0;              // Calibration heading in degrees
 let currentRawHeading = 0;       // Most recently read physical compass heading
 let relativeAngleDeg = 0;        // Relative angle (degrees) [-180, 180]
 let manualOffsetDeg = 0;         // Slider or manual tweak
-let invertSteering = localStorage.getItem('toycar_invert_steering') === '1'; // Invert toggle
+let invertSteering = localStorage.getItem('toycar_invert_steering') === '1';
+
+// God Mode / Physical Lift & Toss Settings
+let godModeEnabled = localStorage.getItem('toycar_god_mode') !== '0'; // default ON
+let liftForceEnabled = localStorage.getItem('toycar_lift_force') !== '0'; // default ON
+let tossForceEnabled = localStorage.getItem('toycar_toss_force') !== '0'; // default ON
+
 let hasSensors = false;
 let peer = null;
 let conn = null;
 let wakeLock = null;
 let sendInterval = null;
 let reconnectTimer = null;
+
+// Accelerometer state for throw / lift detection
+let lastMotionTime = 0;
+let lastAccel = { x: 0, y: 0, z: 0 };
 
 // Elements
 const calibrationOverlay = document.getElementById('calibrationOverlay');
@@ -25,6 +35,10 @@ const steerLabel = document.getElementById('steerLabel');
 const recenterBtn = document.getElementById('recenterBtn');
 const honkBtn = document.getElementById('honkBtn');
 const invertBtn = document.getElementById('invertBtn');
+const godModeBtn = document.getElementById('godModeBtn');
+const toggleLiftBtn = document.getElementById('toggleLiftBtn');
+const toggleTossBtn = document.getElementById('toggleTossBtn');
+const tossTestBtn = document.getElementById('tossTestBtn');
 const touchSlider = document.getElementById('touchSlider');
 const sliderValue = document.getElementById('sliderValue');
 const manualCodeModal = document.getElementById('manualCodeModal');
@@ -37,21 +51,18 @@ const urlParams = new URLSearchParams(window.location.search);
 let targetPeerId = urlParams.get('peer');
 
 if (targetPeerId) {
-  // Normalize
   if (!targetPeerId.startsWith('toycar-') && targetPeerId.length <= 6) {
     targetPeerId = 'toycar-' + targetPeerId;
   }
-  // Remember for future visits!
   localStorage.setItem('toycar_last_peer', targetPeerId);
 } else {
-  // Check remembered peer ID
   const savedPeer = localStorage.getItem('toycar_last_peer');
   if (savedPeer) {
     targetPeerId = savedPeer;
   }
 }
 
-// Update Invert Button UI state
+// Invert Button UI
 function updateInvertBtnUI() {
   if (!invertBtn) return;
   if (invertSteering) {
@@ -74,7 +85,54 @@ if (invertBtn) {
   });
 }
 
-// Show manual code prompt only if completely unknown
+// God Mode / Toss Controls UI
+function updateGodModeUI() {
+  if (godModeBtn) {
+    if (godModeEnabled) {
+      godModeBtn.classList.add('active');
+      godModeBtn.innerHTML = '<span>🚀</span><span>GOD MODE: ON</span>';
+    } else {
+      godModeBtn.classList.remove('active');
+      godModeBtn.innerHTML = '<span>🚀</span><span>GOD MODE: OFF</span>';
+    }
+  }
+  if (toggleLiftBtn) {
+    toggleLiftBtn.classList.toggle('active', liftForceEnabled);
+    toggleLiftBtn.textContent = `Lift (Up/Down): ${liftForceEnabled ? 'ON' : 'OFF'}`;
+  }
+  if (toggleTossBtn) {
+    toggleTossBtn.classList.toggle('active', tossForceEnabled);
+    toggleTossBtn.textContent = `Toss (Push/Slam): ${tossForceEnabled ? 'ON' : 'OFF'}`;
+  }
+}
+updateGodModeUI();
+
+if (godModeBtn) {
+  godModeBtn.addEventListener('click', () => {
+    if (navigator.vibrate) navigator.vibrate(30);
+    godModeEnabled = !godModeEnabled;
+    localStorage.setItem('toycar_god_mode', godModeEnabled ? '1' : '0');
+    updateGodModeUI();
+  });
+}
+
+if (toggleLiftBtn) {
+  toggleLiftBtn.addEventListener('click', () => {
+    liftForceEnabled = !liftForceEnabled;
+    localStorage.setItem('toycar_lift_force', liftForceEnabled ? '1' : '0');
+    updateGodModeUI();
+  });
+}
+
+if (toggleTossBtn) {
+  toggleTossBtn.addEventListener('click', () => {
+    tossForceEnabled = !tossForceEnabled;
+    localStorage.setItem('toycar_toss_force', tossForceEnabled ? '1' : '0');
+    updateGodModeUI();
+  });
+}
+
+// Manual Code Modal
 if (!targetPeerId) {
   if (manualCodeModal) manualCodeModal.style.display = 'flex';
   if (manualCodeSubmit) {
@@ -169,17 +227,14 @@ function updateStatus(text, state) {
   if (statusBadge) statusBadge.className = 'status-badge ' + state;
 }
 
-// --- Heading and DeviceOrientation Handling ---
+// --- Heading & DeviceOrientation Handling ---
 function handleOrientation(e) {
   hasSensors = true;
   let rawHeading = null;
 
-  // iOS Compass Heading (0° = North, clockwise)
   if (typeof e.webkitCompassHeading !== 'undefined' && e.webkitCompassHeading !== null) {
     rawHeading = e.webkitCompassHeading;
-  } 
-  // Standard Alpha (0° to 360°)
-  else if (typeof e.alpha !== 'undefined' && e.alpha !== null) {
+  } else if (typeof e.alpha !== 'undefined' && e.alpha !== null) {
     rawHeading = (360 - e.alpha) % 360;
   }
 
@@ -189,12 +244,63 @@ function handleOrientation(e) {
   }
 }
 
+// --- Physical Lift & Throw Motion Handling (God Mode) ---
+function handleMotion(e) {
+  if (!godModeEnabled) return;
+
+  const now = Date.now();
+  // Throttle motion impulse triggers to max once per 200ms
+  if (now - lastMotionTime < 200) return;
+
+  // Use linear acceleration if available, or accelerationIncludingGravity
+  const acc = e.acceleration || e.accelerationIncludingGravity;
+  if (!acc) return;
+
+  const ax = acc.x || 0;
+  const ay = acc.y || 0;
+  const az = acc.z || 0;
+
+  let triggered = false;
+  let liftForce = 0;
+  let tossForce = 0;
+
+  // 1. Vertical Lift Force (Z or Y spike upward)
+  if (liftForceEnabled) {
+    const verticalMag = Math.max(Math.abs(az), Math.abs(ay));
+    if (verticalMag > 6.0) {
+      liftForce = Math.min(25.0, verticalMag);
+      triggered = true;
+    }
+  }
+
+  // 2. Lateral Throw Force (Forward push or side toss)
+  if (tossForceEnabled) {
+    const horizMag = Math.sqrt(ax * ax + ay * ay);
+    if (horizMag > 7.0) {
+      tossForce = Math.min(25.0, horizMag);
+      triggered = true;
+    }
+  }
+
+  if (triggered && conn && conn.open) {
+    lastMotionTime = now;
+    if (navigator.vibrate) navigator.vibrate([40, 20, 60]);
+
+    conn.send({
+      type: 'god_motion',
+      lift: liftForce,
+      toss: tossForce,
+      ax, ay, az,
+      timestamp: now,
+    });
+  }
+}
+
 function computeRelativeAngle() {
   let diff = currentRawHeading - zeroOffset;
   while (diff > 180) diff -= 360;
   while (diff < -180) diff += 360;
 
-  // Apply invert if toggled by user!
   if (invertSteering) {
     diff = -diff;
   }
@@ -271,19 +377,27 @@ if (startCalibrateBtn) {
   startCalibrateBtn.addEventListener('click', async () => {
     if (navigator.vibrate) navigator.vibrate(50);
 
+    // Orientation permission (iOS)
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
-        const permission = await DeviceOrientationEvent.requestPermission();
-        if (permission !== 'granted') {
-          alert('Sensor permission is required to steer with physical rotation.');
-        }
+        await DeviceOrientationEvent.requestPermission();
       } catch (err) {
         console.warn('Orientation permission error:', err);
       }
     }
 
+    // Motion permission (iOS)
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      try {
+        await DeviceMotionEvent.requestPermission();
+      } catch (err) {
+        console.warn('Motion permission error:', err);
+      }
+    }
+
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
     window.addEventListener('deviceorientation', handleOrientation, true);
+    window.addEventListener('devicemotion', handleMotion, true);
 
     zeroOffset = currentRawHeading;
     computeRelativeAngle();
@@ -293,7 +407,7 @@ if (startCalibrateBtn) {
   });
 }
 
-// --- Re-Center Button ---
+// Re-Center Button
 if (recenterBtn) {
   recenterBtn.addEventListener('click', () => {
     if (navigator.vibrate) navigator.vibrate([25, 50, 25]);
@@ -305,7 +419,7 @@ if (recenterBtn) {
   });
 }
 
-// --- Honk Horn Button ---
+// Honk Horn Button
 if (honkBtn) {
   honkBtn.addEventListener('click', () => {
     if (navigator.vibrate) navigator.vibrate([80, 40, 100]);
@@ -315,7 +429,22 @@ if (honkBtn) {
   });
 }
 
-// --- Touch Slider Fallback ---
+// Throw / Lift Test Button (tap to fling car)
+if (tossTestBtn) {
+  tossTestBtn.addEventListener('click', () => {
+    if (navigator.vibrate) navigator.vibrate([60, 30, 80]);
+    if (conn && conn.open) {
+      conn.send({
+        type: 'god_motion',
+        lift: 16.0,
+        toss: 14.0,
+        timestamp: Date.now(),
+      });
+    }
+  });
+}
+
+// Touch Slider Fallback
 if (touchSlider) {
   touchSlider.addEventListener('input', (e) => {
     manualOffsetDeg = parseFloat(e.target.value);

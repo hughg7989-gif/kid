@@ -86,22 +86,21 @@
 
     /* Main Dashboard Header */
     header {
-      padding: 12px 18px 8px;
+      padding: 10px 16px 6px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      gap: 10px;
+      gap: 8px;
     }
     .status-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
+      gap: 6px;
+      padding: 5px 12px;
       border-radius: 9999px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      letter-spacing: 0.5px;
       background: rgba(234, 179, 8, 0.15);
       color: #facc15;
       border: 1px solid rgba(234, 179, 8, 0.3);
@@ -132,7 +131,7 @@
       color: #38bdf8;
       font-weight: 700;
       background: rgba(255, 255, 255, 0.06);
-      padding: 6px 10px;
+      padding: 5px 10px;
       border-radius: 10px;
       border: 1px solid rgba(56, 189, 248, 0.2);
     }
@@ -140,11 +139,37 @@
       background: transparent;
       border: 1px solid rgba(255, 255, 255, 0.15);
       color: #94a3b8;
-      padding: 5px 8px;
+      padding: 4px 8px;
       border-radius: 8px;
       font-size: 11px;
       font-weight: 600;
       cursor: pointer;
+    }
+
+    /* God Mode Sub-Toggles Toolbar */
+    .god-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(0, 0, 0, 0.25);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .sub-toggle-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .sub-toggle-btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: #38bdf8;
+      color: #38bdf8;
     }
 
     /* Dial & Steering Visualization */
@@ -154,12 +179,12 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 8px 16px;
-      gap: 12px;
+      padding: 4px 16px;
+      gap: 8px;
     }
     .compass-container {
       position: relative;
-      width: min(65vw, 240px);
+      width: min(60vw, 220px);
       aspect-ratio: 1;
       display: flex;
       align-items: center;
@@ -190,18 +215,18 @@
       pointer-events: none;
     }
     .compass-arrow {
-      width: 60px;
-      height: 95px;
+      width: 56px;
+      height: 90px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
     }
     .toy-car-graphic {
-      width: 48px;
-      height: 80px;
+      width: 44px;
+      height: 76px;
       background: #f43f5e;
-      border-radius: 14px;
+      border-radius: 12px;
       position: relative;
       box-shadow: 0 4px 15px rgba(244, 63, 94, 0.4), inset 0 2px 4px rgba(255,255,255,0.4);
       border: 3px solid #ffe4e6;
@@ -209,38 +234,38 @@
     .toy-car-graphic::before {
       content: '';
       position: absolute;
-      top: 16px;
-      left: 6px;
-      right: 6px;
-      height: 26px;
+      top: 15px;
+      left: 5px;
+      right: 5px;
+      height: 24px;
       background: #38bdf8;
-      border-radius: 6px;
+      border-radius: 5px;
       border: 2px solid #bae6fd;
     }
     .wheel {
       position: absolute;
-      width: 8px;
-      height: 16px;
+      width: 7px;
+      height: 15px;
       background: #0f172a;
       border-radius: 3px;
       border: 1px solid #64748b;
     }
-    .wheel.fl { top: 8px; left: -7px; }
-    .wheel.fr { top: 8px; right: -7px; }
-    .wheel.bl { bottom: 8px; left: -7px; }
-    .wheel.br { bottom: 8px; right: -7px; }
+    .wheel.fl { top: 8px; left: -6px; }
+    .wheel.fr { top: 8px; right: -6px; }
+    .wheel.bl { bottom: 8px; left: -6px; }
+    .wheel.br { bottom: 8px; right: -6px; }
 
     .steer-readout {
       text-align: center;
     }
     .steer-deg {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 900;
       color: #38bdf8;
       letter-spacing: -0.5px;
     }
     .steer-label {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: #94a3b8;
       text-transform: uppercase;
@@ -249,29 +274,28 @@
 
     /* Actions bottom bar */
     footer {
-      padding: 12px 16px 20px;
+      padding: 10px 14px 18px;
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-      background: rgba(15, 23, 42, 0.65);
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.7);
       border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
     .action-btn {
       appearance: none;
       border: none;
       outline: none;
-      padding: 14px 6px;
-      border-radius: 14px;
-      font-size: 13px;
+      padding: 12px 4px;
+      border-radius: 12px;
+      font-size: 11px;
       font-weight: 800;
-      letter-spacing: 0.3px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      transition: transform 0.1s ease, filter 0.1s ease;
+      gap: 3px;
+      transition: transform 0.1s ease;
       color: #ffffff;
       text-align: center;
     }
@@ -280,7 +304,7 @@
     }
     .btn-recenter {
       background: linear-gradient(135deg, #4f46e5, #3b82f6);
-      box-shadow: 0 4px 15px rgba(59, 130, 246, 0.35);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
     }
     .btn-invert {
       background: linear-gradient(135deg, #64748b, #475569);
@@ -288,12 +312,21 @@
     }
     .btn-invert.active {
       background: linear-gradient(135deg, #ec4899, #d946ef);
-      box-shadow: 0 4px 15px rgba(236, 72, 153, 0.4);
+      box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4);
       border-color: #f472b6;
+    }
+    .btn-god {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .btn-god.active {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+      border-color: #34d399;
     }
     .btn-honk {
       background: linear-gradient(135deg, #f59e0b, #d97706);
-      box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35);
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
     }
 
     /* Manual fallback slider */
@@ -302,10 +335,10 @@
       max-width: 320px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      padding: 6px 12px;
+      gap: 3px;
+      padding: 5px 12px;
       background: rgba(255, 255, 255, 0.04);
-      border-radius: 12px;
+      border-radius: 10px;
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
     .touch-fallback-header {
@@ -318,7 +351,7 @@
     .touch-slider {
       width: 100%;
       accent-color: #38bdf8;
-      height: 22px;
+      height: 20px;
     }
 
     /* Peer Code Manual Form */
@@ -382,7 +415,7 @@
     <div class="inst-card">
       📍 <strong>Instructions:</strong><br/>
       1. Place phone <strong>flat</strong> on the toy car.<br/>
-      2. If phone is mounted facing you, tap <strong>INVERT</strong> below.<br/>
+      2. <strong>God Mode:</strong> Pick up and toss the car to fling it through the air!<br/>
       3. Tap the big circle to calibrate heading!
     </div>
   </div>
@@ -398,6 +431,13 @@
       <button id="changeRoomBtn" class="btn-room-change" title="Switch to another PC game">Change</button>
     </div>
   </header>
+
+  <!-- God Mode Sub-Toggles -->
+  <div class="god-toolbar">
+    <button id="toggleLiftBtn" class="sub-toggle-btn active">Lift (Up/Down): ON</button>
+    <button id="toggleTossBtn" class="sub-toggle-btn active">Toss (Push): ON</button>
+    <button id="tossTestBtn" class="sub-toggle-btn" style="color: #facc15; border-color: #facc15;">🚀 Jump / Toss!</button>
+  </div>
 
   <main>
     <div class="compass-container">
@@ -439,11 +479,15 @@
     </button>
     <button id="invertBtn" class="action-btn btn-invert">
       <span>🔄</span>
-      <span>INVERT: OFF</span>
+      <span>INVERT</span>
+    </button>
+    <button id="godModeBtn" class="action-btn btn-god active">
+      <span>🚀</span>
+      <span>GOD MODE</span>
     </button>
     <button id="honkBtn" class="action-btn btn-honk">
       <span>🎺</span>
-      <span>HONK HORN!</span>
+      <span>HONK!</span>
     </button>
   </footer>
 

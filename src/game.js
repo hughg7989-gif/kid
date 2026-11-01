@@ -1,4 +1,4 @@
-/* Toddler Toy Car 3D - Infinite Procedural World with Modular Vehicles & Roads */
+/* Toddler Toy Car 3D - High-Performance Procedural World with God Mode & Custom Vehicles */
 
 import { SoundEngine } from './audio.js';
 import { VEHICLES, getVehicleById } from './vehicles/index.js';
@@ -6,14 +6,13 @@ import { VEHICLES, getVehicleById } from './vehicles/index.js';
 // ==========================================
 // 1. CONFIGURATION & PERSISTENT ROOM PAIRING
 // ==========================================
-// Infinite World Dimensions
-const WORLD_SPAN = 360;        // Active world bounding box size (-180 to +180 relative to car)
+const ROAD_INTERVAL = 100;     // Roads every 100 units in world space
+const WORLD_SPAN = 400;        // Active obstacle envelope (-200 to +200 relative to car)
 const HALF_SPAN = WORLD_SPAN / 2;
 const GRID_CELL_SIZE = 12;     // Spatial hash cell size
-const GRID_DIM = Math.ceil(WORLD_SPAN / GRID_CELL_SIZE); // 30x30 spatial cells
-const ROAD_INTERVAL = 90;      // Roads run every 90 units along X and Z
+const GRID_DIM = Math.ceil(WORLD_SPAN / GRID_CELL_SIZE); // ~34x34 spatial cells
 
-// Persistent Room Code (Never changes across reloads unless user resets)
+// Persistent Room Code
 let persistentRoomCode = localStorage.getItem('toycar_pc_room_code');
 if (!persistentRoomCode || persistentRoomCode.length < 4) {
   persistentRoomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -21,27 +20,24 @@ if (!persistentRoomCode || persistentRoomCode.length < 4) {
 }
 const fullPeerId = 'toycar-' + persistentRoomCode;
 
-// Active Vehicle State (Remembered in localStorage)
+// Active Vehicle State
 const savedVehicleId = localStorage.getItem('toycar_active_vehicle') || 'car';
 let currentVehicleDef = getVehicleById(savedVehicleId);
 
-// Steering Invert Toggle (can be toggled on PC or phone)
+// Steering Invert Toggle on PC
 let invertSteeringPC = localStorage.getItem('toycar_pc_invert') === '1';
+
+// God Mode / Physical Lift & Throw Settings
+let godModeEnabled = localStorage.getItem('toycar_god_mode') !== '0';
+let liftForceEnabled = localStorage.getItem('toycar_lift_force') !== '0';
+let tossForceEnabled = localStorage.getItem('toycar_toss_force') !== '0';
 
 // Sound Engine
 const soundEngine = new SoundEngine();
 
 // ==========================================
-// 2. PROCEDURAL MULTI-TYPE OBSTACLE COUNTS
+// 2. PROCEDURAL ENVIRONMENT POPULATION (SoA)
 // ==========================================
-// Obstacle categories:
-// 0: Trees (Pine & Apple Trees)
-// 1: Suburban Houses
-// 2: Farm Barns
-// 3: Farm Hay Bales
-// 4: Toddler Toy Blocks
-// 5: Streetlamps & Traffic Cones
-
 const COUNT_TREES = 1400;
 const COUNT_HOUSES = 300;
 const COUNT_BARNS = 120;
@@ -51,9 +47,8 @@ const COUNT_STREETLAMPS = 240;
 
 const TOTAL_OBSTACLES = COUNT_TREES + COUNT_HOUSES + COUNT_BARNS + COUNT_HAYBALES + COUNT_TOYBLOCKS + COUNT_STREETLAMPS;
 
-// Data-Oriented Design (Structure of Arrays - SoA)
 const obstacleSoA = {
-  positions: new Float32Array(TOTAL_OBSTACLES * 2), // [x, z, x, z, ...]
+  positions: new Float32Array(TOTAL_OBSTACLES * 2), // [x, z, ...]
   radii: new Float32Array(TOTAL_OBSTACLES),
   states: new Uint8Array(TOTAL_OBSTACLES),          // 0 = Active, 1 = Crumbling, 2 = Smashed
   types: new Uint8Array(TOTAL_OBSTACLES),           // 0: Tree, 1: House, 2: Barn, 3: Hay, 4: Block, 5: Lamp
@@ -64,7 +59,6 @@ const obstacleSoA = {
   baseScales: new Float32Array(TOTAL_OBSTACLES),
 };
 
-// Spatial Hash Grid (30x30 cells wrapping around car)
 const spatialGrid = new Array(GRID_DIM * GRID_DIM);
 for (let i = 0; i < spatialGrid.length; i++) {
   spatialGrid[i] = [];
@@ -91,14 +85,14 @@ function insertIntoGrid(obstacleIdx, relX, relZ) {
 }
 
 // ==========================================
-// 3. THREE.JS SCENE, LIGHTING & PROCEDURAL ROAD MAP
+// 3. THREE.JS SCENE & STATIONARY REAL ROAD MAP
 // ==========================================
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa5d8ff); // Sky blue
-scene.fog = new THREE.Fog(0xa5d8ff, 70, 260);
+scene.background = new THREE.Color(0xa5d8ff);
+scene.fog = new THREE.Fog(0xa5d8ff, 80, 280);
 
-const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, 500);
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, 550);
 camera.position.set(0, 15, -24);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -109,38 +103,38 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 container.appendChild(renderer.domElement);
 
-// Warm sunlight & cool hemisphere bounce
+// Lighting
 const hemiLight = new THREE.HemisphereLight(0xfffdf5, 0x38bdf8, 0.7);
 scene.add(hemiLight);
 
-const sunLight = new THREE.DirectionalLight(0xfffaed, 1.2);
-sunLight.position.set(50, 100, 70);
+const sunLight = new THREE.DirectionalLight(0xfffaed, 1.25);
+sunLight.position.set(60, 110, 70);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.width = 2048;
 sunLight.shadow.mapSize.height = 2048;
 sunLight.shadow.camera.near = 10;
 sunLight.shadow.camera.far = 300;
-sunLight.shadow.camera.left = -60;
-sunLight.shadow.camera.right = 60;
-sunLight.shadow.camera.top = 60;
-sunLight.shadow.camera.bottom = -60;
+sunLight.shadow.camera.left = -65;
+sunLight.shadow.camera.right = 65;
+sunLight.shadow.camera.top = 65;
+sunLight.shadow.camera.bottom = -65;
 sunLight.shadow.bias = -0.0005;
 scene.add(sunLight);
 scene.add(sunLight.target);
 
-// Procedural Meadow & Road Grid Texture (Repeats every ROAD_INTERVAL = 90 units)
-function createEndlessRoadTexture() {
+// High-Fidelity Stationary Road & Meadow Canvas Texture
+function createStationaryRoadTexture() {
   const size = 1024;
   const cvs = document.createElement('canvas');
   cvs.width = size;
   cvs.height = size;
   const ctx = cvs.getContext('2d');
 
-  // 1. Lush grass base
+  // 1. Lush Green Meadow
   ctx.fillStyle = '#86efac';
   ctx.fillRect(0, 0, size, size);
 
-  // Soft grass checkerboard pattern
+  // Checkerboard grass lawn tiles
   ctx.fillStyle = '#6ee7b7';
   const tileSize = 64;
   for (let x = 0; x < size; x += tileSize) {
@@ -151,13 +145,12 @@ function createEndlessRoadTexture() {
     }
   }
 
-  // Cute flower dots in grassy areas
+  // Cute flower patches in grassy areas away from road
   const flowerColors = ['#fef08a', '#f472b6', '#ffffff', '#fed7aa'];
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 80; i++) {
     const fx = Math.random() * size;
     const fy = Math.random() * size;
-    // Don't place in roads (center bands)
-    if (Math.abs(fx - size / 2) > 90 && Math.abs(fy - size / 2) > 90) {
+    if (Math.abs(fx - size / 2) > 95 && Math.abs(fy - size / 2) > 95) {
       ctx.fillStyle = flowerColors[i % flowerColors.length];
       ctx.beginPath();
       ctx.arc(fx, fy, 3.5, 0, Math.PI * 2);
@@ -165,68 +158,66 @@ function createEndlessRoadTexture() {
     }
   }
 
-  // 2. Asphalt Roads (Crossroad through center)
-  const roadWidth = 140; // in canvas pixels (~12.3 world units)
+  // 2. Real Paved Road Network (Crossroad through tile center)
+  // Tile corresponds to 100 world units. Road width = 14 world units (~143 canvas px).
+  const roadPx = 144;
   const center = size / 2;
 
-  // Sidewalk curbs
+  // Concrete Sidewalk Curbs
   ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(center - roadWidth / 2 - 8, 0, roadWidth + 16, size);
-  ctx.fillRect(0, center - roadWidth / 2 - 8, size, roadWidth + 16);
+  ctx.fillRect(center - roadPx / 2 - 10, 0, roadPx + 20, size);
+  ctx.fillRect(0, center - roadPx / 2 - 10, size, roadPx + 20);
 
-  // Dark asphalt surface
+  // Dark Smooth Asphalt
   ctx.fillStyle = '#334155';
-  ctx.fillRect(center - roadWidth / 2, 0, roadWidth, size);
-  ctx.fillRect(0, center - roadWidth / 2, size, roadWidth);
+  ctx.fillRect(center - roadPx / 2, 0, roadPx, size);
+  ctx.fillRect(0, center - roadPx / 2, size, roadPx);
 
-  // White road boundary lines
+  // Solid White Shoulder Lines
   ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(center - roadWidth / 2 + 6, 0, 4, size);
-  ctx.fillRect(center + roadWidth / 2 - 10, 0, 4, size);
-  ctx.fillRect(0, center - roadWidth / 2 + 6, size, 4);
-  ctx.fillRect(0, center + roadWidth / 2 - 10, size, 4);
+  ctx.fillRect(center - roadPx / 2 + 6, 0, 4, size);
+  ctx.fillRect(center + roadPx / 2 - 10, 0, 4, size);
+  ctx.fillRect(0, center - roadPx / 2 + 6, size, 4);
+  ctx.fillRect(0, center + roadPx / 2 - 10, size, 4);
 
-  // Dashed Yellow Centerlines
+  // Bright Yellow Dashed Centerlines
   ctx.fillStyle = '#facc15';
-  for (let y = 0; y < size; y += 40) {
-    // Skip inside intersection
-    if (Math.abs(y - center) > roadWidth / 2 + 10) {
-      ctx.fillRect(center - 3, y + 8, 6, 24);
+  for (let y = 0; y < size; y += 42) {
+    if (Math.abs(y - center) > roadPx / 2 + 12) {
+      ctx.fillRect(center - 3, y + 8, 6, 26);
     }
   }
-  for (let x = 0; x < size; x += 40) {
-    if (Math.abs(x - center) > roadWidth / 2 + 10) {
-      ctx.fillRect(x + 8, center - 3, 24, 6);
+  for (let x = 0; x < size; x += 42) {
+    if (Math.abs(x - center) > roadPx / 2 + 12) {
+      ctx.fillRect(x + 8, center - 3, 26, 6);
     }
   }
 
-  // Zebra Pedestrian Crossings at intersection
+  // Zebra Pedestrian Crosswalks at Intersection
   ctx.fillStyle = '#ffffff';
   for (let k = -50; k <= 50; k += 20) {
-    // North crossing
-    ctx.fillRect(center + k - 5, center - roadWidth / 2 - 25, 12, 20);
-    // South crossing
-    ctx.fillRect(center + k - 5, center + roadWidth / 2 + 5, 12, 20);
-    // West crossing
-    ctx.fillRect(center - roadWidth / 2 - 25, center + k - 5, 20, 12);
-    // East crossing
-    ctx.fillRect(center + roadWidth / 2 + 5, center + k - 5, 20, 12);
+    ctx.fillRect(center + k - 5, center - roadPx / 2 - 26, 12, 22);
+    ctx.fillRect(center + k - 5, center + roadPx / 2 + 4, 12, 22);
+    ctx.fillRect(center - roadPx / 2 - 26, center + k - 5, 22, 12);
+    ctx.fillRect(center + roadPx / 2 + 4, center + k - 5, 22, 12);
   }
 
   const texture = new THREE.CanvasTexture(cvs);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  // Repeat so 1 cycle = ROAD_INTERVAL (90 units)
-  const repeats = WORLD_SPAN / ROAD_INTERVAL; // 4.0
-  texture.repeat.set(repeats * 2, repeats * 2);
   texture.encoding = THREE.sRGBEncoding;
   return texture;
 }
 
-// Endless Ground Plane (tracks player position so it never ends)
-const groundGeo = new THREE.PlaneGeometry(WORLD_SPAN * 2, WORLD_SPAN * 2);
+// Stationary World Ground Mesh
+// Fixed at (0, 0, 0) with 3000x3000 units. UV repeat = 3000 / 100 = 30.
+const GROUND_SIZE = 3000;
+const groundTexture = createStationaryRoadTexture();
+groundTexture.repeat.set(GROUND_SIZE / ROAD_INTERVAL, GROUND_SIZE / ROAD_INTERVAL);
+
+const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
 const groundMat = new THREE.MeshStandardMaterial({
-  map: createEndlessRoadTexture(),
+  map: groundTexture,
   roughness: 0.85,
   metalness: 0.1,
 });
@@ -235,7 +226,16 @@ groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
 
-// Helper for geometry merging
+// Function to keep ground aligned seamlessly if car drives kilometers away
+function updateGroundPosition(carX, carZ) {
+  // Snap in discrete steps of ROAD_INTERVAL (100 units) so texture pattern never slides under wheels!
+  const snapX = Math.round(carX / ROAD_INTERVAL) * ROAD_INTERVAL;
+  const snapZ = Math.round(carZ / ROAD_INTERVAL) * ROAD_INTERVAL;
+  if (Math.abs(groundMesh.position.x - snapX) >= ROAD_INTERVAL || Math.abs(groundMesh.position.z - snapZ) >= ROAD_INTERVAL) {
+    groundMesh.position.set(snapX, 0, snapZ);
+  }
+}
+
 function mergeGeometries(geos) {
   if (window.THREE && THREE.BufferGeometryUtils && THREE.BufferGeometryUtils.mergeBufferGeometries) {
     return THREE.BufferGeometryUtils.mergeBufferGeometries(geos, false);
@@ -256,10 +256,8 @@ const setGeoColor = (geo, colorHex) => {
 };
 
 // ==========================================
-// 4. PROCEDURAL ENVIRONMENT GEOMETRIES
+// 4. ENVIRONMENT GEOMETRIES (6 Procedural Types)
 // ==========================================
-
-// 1. Varied Trees: Pine & Fruit Trees
 function createTreeGeometry() {
   const trunk = new THREE.CylinderGeometry(0.35, 0.55, 3.2, 7);
   trunk.translate(0, 1.6, 0);
@@ -273,28 +271,21 @@ function createTreeGeometry() {
   const foliage3 = new THREE.ConeGeometry(1.1, 2.0, 7);
   foliage3.translate(0, 6.1, 0);
 
-  // Red apples / fruits on tree
   const apple1 = new THREE.SphereGeometry(0.25, 6, 6);
   apple1.translate(0.9, 4.0, 0.7);
-
   const apple2 = apple1.clone();
   apple2.translate(-1.8, 0.6, -0.4);
 
-  const apple3 = apple1.clone();
-  apple3.translate(0.4, 1.2, -1.5);
-
-  setGeoColor(trunk, 0x854d0e);     // Wood trunk
-  setGeoColor(foliage1, 0x22c55e);  // Forest green
-  setGeoColor(foliage2, 0x16a34a);  // Mid green
-  setGeoColor(foliage3, 0x15803d);  // Deep green
-  setGeoColor(apple1, 0xef4444);    // Red apple
+  setGeoColor(trunk, 0x854d0e);
+  setGeoColor(foliage1, 0x22c55e);
+  setGeoColor(foliage2, 0x16a34a);
+  setGeoColor(foliage3, 0x15803d);
+  setGeoColor(apple1, 0xef4444);
   setGeoColor(apple2, 0xef4444);
-  setGeoColor(apple3, 0xef4444);
 
-  return mergeGeometries([trunk, foliage1, foliage2, foliage3, apple1, apple2, apple3]);
+  return mergeGeometries([trunk, foliage1, foliage2, foliage3, apple1, apple2]);
 }
 
-// 2. Suburban Houses (Base + Pitched Roof + Chimney + Door)
 function createHouseGeometry() {
   const base = new THREE.BoxGeometry(4.2, 3.2, 4.2);
   base.translate(0, 1.6, 0);
@@ -309,15 +300,14 @@ function createHouseGeometry() {
   const door = new THREE.BoxGeometry(1.2, 2.0, 0.2);
   door.translate(0, 1.0, 2.11);
 
-  setGeoColor(base, 0xf8fafc);     // Crisp white house walls
-  setGeoColor(roof, 0xe11d48);     // Crimson roof
-  setGeoColor(chimney, 0x64748b);  // Stone chimney
-  setGeoColor(door, 0x0284c7);     // Blue door
+  setGeoColor(base, 0xf8fafc);
+  setGeoColor(roof, 0xe11d48);
+  setGeoColor(chimney, 0x64748b);
+  setGeoColor(door, 0x0284c7);
 
   return mergeGeometries([base, roof, chimney, door]);
 }
 
-// 3. Country Farm Barns (Red barn with gambrel roof & hayloft window)
 function createBarnGeometry() {
   const barnBody = new THREE.BoxGeometry(5.2, 3.6, 6.0);
   barnBody.translate(0, 1.8, 0);
@@ -332,53 +322,42 @@ function createBarnGeometry() {
   const barnDoor = new THREE.BoxGeometry(2.4, 2.4, 0.25);
   barnDoor.translate(0, 1.2, 3.02);
 
-  const loftWindow = new THREE.BoxGeometry(1.2, 1.2, 0.25);
-  loftWindow.translate(0, 3.8, 3.02);
-
-  // Silo next to barn
   const silo = new THREE.CylinderGeometry(1.4, 1.4, 6.0, 12);
   silo.translate(3.8, 3.0, 0);
 
   const siloDome = new THREE.SphereGeometry(1.4, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
   siloDome.translate(3.8, 6.0, 0);
 
-  setGeoColor(barnBody, 0xb91c1c);   // Traditional Barn Red
-  setGeoColor(roofLower, 0x475569);  // Dark metal roof
+  setGeoColor(barnBody, 0xb91c1c);
+  setGeoColor(roofLower, 0x475569);
   setGeoColor(roofPeak, 0x475569);
-  setGeoColor(barnDoor, 0xffffff);   // White trim X barn doors
-  setGeoColor(loftWindow, 0xffffff);
-  setGeoColor(silo, 0x94a3b8);       // Silver grain silo
+  setGeoColor(barnDoor, 0xffffff);
+  setGeoColor(silo, 0x94a3b8);
   setGeoColor(siloDome, 0x64748b);
 
-  return mergeGeometries([barnBody, roofLower, roofPeak, barnDoor, loftWindow, silo, siloDome]);
+  return mergeGeometries([barnBody, roofLower, roofPeak, barnDoor, silo, siloDome]);
 }
 
-// 4. Farm Hay Bales (Yellow Cylinders lying flat)
 function createHayBaleGeometry() {
   const bale = new THREE.CylinderGeometry(1.1, 1.1, 2.4, 12);
   bale.rotateZ(Math.PI / 2);
   bale.translate(0, 1.1, 0);
-
-  setGeoColor(bale, 0xfacc15); // Golden hay yellow
+  setGeoColor(bale, 0xfacc15);
   return bale;
 }
 
-// 5. Toddler Toy Blocks (Colorful Giant ABC Toy Cubes)
 function createToyBlockGeometry() {
   const cube = new THREE.BoxGeometry(2.2, 2.2, 2.2);
   cube.translate(0, 1.1, 0);
 
-  // Star / letter accent on top
   const accent = new THREE.BoxGeometry(1.4, 0.1, 1.4);
   accent.translate(0, 2.21, 0);
 
-  setGeoColor(cube, 0x06b6d4);   // Bright cyan block
-  setGeoColor(accent, 0xfef08a); // Yellow star cap
-
+  setGeoColor(cube, 0x06b6d4);
+  setGeoColor(accent, 0xfef08a);
   return mergeGeometries([cube, accent]);
 }
 
-// 6. Streetlamps along roads (Posts with glowing lanterns)
 function createStreetlampGeometry() {
   const pole = new THREE.CylinderGeometry(0.12, 0.16, 4.5, 8);
   pole.translate(0, 2.25, 0);
@@ -389,14 +368,12 @@ function createStreetlampGeometry() {
   const lamp = new THREE.BoxGeometry(0.45, 0.55, 0.45);
   lamp.translate(0, 4.2, 1.0);
 
-  setGeoColor(pole, 0x1e293b); // Dark metal pole
+  setGeoColor(pole, 0x1e293b);
   setGeoColor(arm, 0x1e293b);
-  setGeoColor(lamp, 0xfef08a); // Glowing warm lantern
-
+  setGeoColor(lamp, 0xfef08a);
   return mergeGeometries([pole, arm, lamp]);
 }
 
-// Instantiate InstancedMeshes
 const instancedMeshes = {
   trees: new THREE.InstancedMesh(createTreeGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), COUNT_TREES),
   houses: new THREE.InstancedMesh(createHouseGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), COUNT_HOUSES),
@@ -406,7 +383,6 @@ const instancedMeshes = {
   streetlamps: new THREE.InstancedMesh(createStreetlampGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), COUNT_STREETLAMPS),
 };
 
-// Enable shadows and disable frustum culling on instanced meshes spanning the terrain
 Object.values(instancedMeshes).forEach((mesh) => {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -414,17 +390,14 @@ Object.values(instancedMeshes).forEach((mesh) => {
   scene.add(mesh);
 });
 
-// Helper: Check if a position is on a road (roads every ROAD_INTERVAL = 90 units, width ~13 units)
 function isOnRoad(x, z, margin = 4.0) {
   const modX = Math.abs(((x % ROAD_INTERVAL) + ROAD_INTERVAL) % ROAD_INTERVAL);
   const modZ = Math.abs(((z % ROAD_INTERVAL) + ROAD_INTERVAL) % ROAD_INTERVAL);
-  const roadHalfWidth = 6.5 + margin;
-  const isNearRoadX = modX < roadHalfWidth || modX > ROAD_INTERVAL - roadHalfWidth;
-  const isNearRoadZ = modZ < roadHalfWidth || modZ > ROAD_INTERVAL - roadHalfWidth;
-  return isNearRoadX || isNearRoadZ;
+  const roadHalfWidth = 7.0 + margin;
+  return (modX < roadHalfWidth || modX > ROAD_INTERVAL - roadHalfWidth) ||
+         (modZ < roadHalfWidth || modZ > ROAD_INTERVAL - roadHalfWidth);
 }
 
-// Populate Environment Obstacles across initial world
 let globalObsIdx = 0;
 const dummyObj = new THREE.Object3D();
 
@@ -436,7 +409,7 @@ function populateObstacleGroup(mesh, count, typeId, baseRadius, canBeOnRoad = fa
       x = (Math.random() - 0.5) * WORLD_SPAN;
       z = (Math.random() - 0.5) * WORLD_SPAN;
       attempts++;
-    } while (attempts < 25 && !canBeOnRoad && isOnRoad(x, z, 3.0));
+    } while (attempts < 25 && !canBeOnRoad && isOnRoad(x, z, 3.5));
 
     const scale = 0.8 + Math.random() * 0.4;
     const rotY = Math.random() * Math.PI * 2;
@@ -452,7 +425,7 @@ function populateObstacleGroup(mesh, count, typeId, baseRadius, canBeOnRoad = fa
     obstacleSoA.positions[idx * 2] = x;
     obstacleSoA.positions[idx * 2 + 1] = z;
     obstacleSoA.radii[idx] = baseRadius * scale;
-    obstacleSoA.states[idx] = 0; // Active
+    obstacleSoA.states[idx] = 0;
     obstacleSoA.types[idx] = typeId;
     obstacleSoA.instanceIndices[idx] = i;
     obstacleSoA.crumbleProgress[idx] = 0;
@@ -468,24 +441,29 @@ function populateObstacleGroup(mesh, count, typeId, baseRadius, canBeOnRoad = fa
   mesh.instanceMatrix.needsUpdate = true;
 }
 
-// Populate all categories
 populateObstacleGroup(instancedMeshes.trees, COUNT_TREES, 0, 1.3, false);
 populateObstacleGroup(instancedMeshes.houses, COUNT_HOUSES, 1, 2.5, false);
 populateObstacleGroup(instancedMeshes.barns, COUNT_BARNS, 2, 3.4, false);
 populateObstacleGroup(instancedMeshes.haybales, COUNT_HAYBALES, 3, 1.4, false);
-populateObstacleGroup(instancedMeshes.toyblocks, COUNT_TOYBLOCKS, 4, 1.5, true); // Toy blocks can sit on roadside!
-populateObstacleGroup(instancedMeshes.streetlamps, COUNT_STREETLAMPS, 5, 0.9, true); // Lamps sit right at road edges!
+populateObstacleGroup(instancedMeshes.toyblocks, COUNT_TOYBLOCKS, 4, 1.5, true);
+populateObstacleGroup(instancedMeshes.streetlamps, COUNT_STREETLAMPS, 5, 0.9, true);
 
 // ==========================================
-// 5. MODULAR VEHICLE SPAWNING & KINEMATICS
+// 5. VEHICLE MOUNTING & STATE WITH 3D FLIGHT
 // ==========================================
 let currentVehicleMesh = null;
 let currentWheels = [];
 
 const carState = {
   x: 0,
+  y: 0,                // 3D Altitude
   z: 0,
-  angle: 0,
+  vy: 0,               // Vertical velocity for flight & throws
+  bonusSpeed: 0,       // Boost from physical throws
+  pitch: 0,            // Dynamic tilt angle
+  roll: 0,
+  isAirborne: false,
+  angle: 0,            // Steering yaw
   targetAngle: 0,
   currentSpeed: currentVehicleDef.baseSpeed,
   collisionCount: 0,
@@ -504,7 +482,6 @@ function mountVehicle(vehicleDef) {
   soundEngine.setVehicle(vehicleDef);
   localStorage.setItem('toycar_active_vehicle', vehicleDef.id);
 
-  // Update UI badge
   const vehicleNameBadge = document.getElementById('vehicleNameBadge');
   if (vehicleNameBadge) {
     vehicleNameBadge.textContent = `${vehicleDef.icon} ${vehicleDef.name}`;
@@ -514,7 +491,7 @@ function mountVehicle(vehicleDef) {
 mountVehicle(currentVehicleDef);
 
 // ==========================================
-// 6. POPPING PUFF PARTICLES (ON HIT)
+// 6. POPPING PUFF PARTICLES
 // ==========================================
 const MAX_PARTICLES = 160;
 const particleGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
@@ -626,13 +603,11 @@ function updateCrumblingAndInfiniteWrapping(dt) {
     let ox = obstacleSoA.positions[i * 2];
     let oz = obstacleSoA.positions[i * 2 + 1];
 
-    // Calculate position relative to car
     let dx = ox - carState.x;
     let dz = oz - carState.z;
     let shifted = false;
 
-    // Infinite Seamless Toroidal Wrapping: If obstacle gets > HALF_SPAN behind the car,
-    // seamlessly shift it forward ahead of the car!
+    // Toroidal wrap around car: If obstacle gets > HALF_SPAN behind the car, shift it ahead
     if (dx > HALF_SPAN) {
       ox -= WORLD_SPAN;
       dx -= WORLD_SPAN;
@@ -656,11 +631,9 @@ function updateCrumblingAndInfiniteWrapping(dt) {
     if (shifted) {
       obstacleSoA.positions[i * 2] = ox;
       obstacleSoA.positions[i * 2 + 1] = oz;
-      // Re-activate obstacle ahead in horizon!
       obstacleSoA.states[i] = 0;
       obstacleSoA.crumbleProgress[i] = 0;
 
-      // Rebuild initial matrix at new world coordinates
       const s = obstacleSoA.baseScales[i];
       dummyObj.position.set(ox, 0, oz);
       dummyObj.rotation.set(0, (i * 1.3) % (Math.PI * 2), 0);
@@ -677,12 +650,10 @@ function updateCrumblingAndInfiniteWrapping(dt) {
       meshUpdates.add(mTarget);
     }
 
-    // Insert active obstacles into spatial grid for $O(1)$ collision check
     if (obstacleSoA.states[i] === 0) {
       insertIntoGrid(i, dx, dz);
     }
 
-    // Process crumbling animation
     if (obstacleSoA.states[i] === 1) {
       obstacleSoA.crumbleProgress[i] += dt * 2.4;
       const progress = Math.min(1.0, obstacleSoA.crumbleProgress[i]);
@@ -709,18 +680,16 @@ function updateCrumblingAndInfiniteWrapping(dt) {
       meshUpdates.add(targetMesh);
 
       if (progress >= 1.0) {
-        obstacleSoA.states[i] = 2; // Smashed
+        obstacleSoA.states[i] = 2;
       }
     }
   }
 
-  // Flag needsUpdate on modified instanced meshes
   meshUpdates.forEach(m => {
     m.instanceMatrix.needsUpdate = true;
   });
 }
 
-// Angular interpolation (Shortest-path lerp)
 function lerpAngle(from, to, t) {
   let diff = (to - from) % (Math.PI * 2);
   if (diff > Math.PI) diff -= Math.PI * 2;
@@ -729,65 +698,96 @@ function lerpAngle(from, to, t) {
 }
 
 // ==========================================
-// 8. COLLISION DETECTION & VEHICLE DRIVE
+// 8. 3D PHYSICS & COLLISION SIMULATION
 // ==========================================
 function checkCollisionsAndDrive(dt) {
-  // 1. Smoothly interpolate steering towards target angle
+  // 1. Steering interpolation
   carState.angle = lerpAngle(carState.angle, carState.targetAngle, Math.min(1.0, dt * 5.5));
 
-  // 2. Continuous Gentle Drive (NO WALLS - infinite cruising!)
+  // 2. 3D Flight & Throw Dynamics (God Mode)
+  if (carState.isAirborne || carState.y > 0) {
+    // Gravity pulls vehicle down
+    carState.vy -= 28.0 * dt;
+    carState.y += carState.vy * dt;
+
+    // Self-Righting Spring Kinematics: continuously pull pitch and roll back to 0!
+    // The car NEVER flips upside down!
+    carState.pitch *= Math.exp(-6.0 * dt);
+    carState.roll *= Math.exp(-6.0 * dt);
+
+    // Landing on ground
+    if (carState.y <= 0) {
+      carState.y = 0;
+      carState.vy = 0;
+      carState.pitch = 0;
+      carState.roll = 0;
+      if (carState.isAirborne) {
+        carState.isAirborne = false;
+        soundEngine.playLandingThud();
+        spawnParticles(carState.x, 0.2, carState.z, 24);
+      }
+    }
+  }
+
+  // Bonus speed decay
+  if (carState.bonusSpeed > 0) {
+    carState.bonusSpeed = Math.max(0, carState.bonusSpeed - dt * 10.0);
+  }
+
+  // Total forward speed
+  const totalForwardSpeed = carState.currentSpeed + carState.bonusSpeed;
   const forwardX = Math.sin(carState.angle);
   const forwardZ = Math.cos(carState.angle);
 
-  carState.x += forwardX * carState.currentSpeed * dt;
-  carState.z += forwardZ * carState.currentSpeed * dt;
+  carState.x += forwardX * totalForwardSpeed * dt;
+  carState.z += forwardZ * totalForwardSpeed * dt;
 
-  // 3. Move endless ground plane under car so terrain never ends
-  groundMesh.position.set(carState.x, 0, carState.z);
+  // Update stationary ground mesh alignment (snaps discretely per 100 units, no treadmill!)
+  updateGroundPosition(carState.x, carState.z);
 
-  // 4. Query Spatial Hash Grid ($O(1)$ constant time lookup around car)
-  // Car is at center (relX = 0, relZ = 0)
-  const centerCellX = Math.floor(HALF_SPAN / GRID_CELL_SIZE);
-  const centerCellZ = Math.floor(HALF_SPAN / GRID_CELL_SIZE);
-
+  // 3. Collision Detection (Only collides when vehicle is near ground level: y < 3.5)
   let isCollidingThisFrame = false;
-  const vehicleRadius = currentVehicleDef.id === 'bus' ? 2.2 : (currentVehicleDef.id === 'truck' ? 2.0 : 1.7);
+  if (carState.y < 3.5) {
+    const centerCellX = Math.floor(HALF_SPAN / GRID_CELL_SIZE);
+    const centerCellZ = Math.floor(HALF_SPAN / GRID_CELL_SIZE);
+    const vehicleRadius = currentVehicleDef.id === 'bus' ? 2.2 : (currentVehicleDef.id === 'truck' ? 2.0 : 1.7);
 
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      const cx = centerCellX + dx;
-      const cz = centerCellZ + dz;
-      if (cx >= 0 && cx < GRID_DIM && cz >= 0 && cz < GRID_DIM) {
-        const cellIdx = cz * GRID_DIM + cx;
-        const obstacles = spatialGrid[cellIdx];
-        for (let k = 0; k < obstacles.length; k++) {
-          const obsIdx = obstacles[k];
-          if (obstacleSoA.states[obsIdx] === 0) {
-            const ox = obstacleSoA.positions[obsIdx * 2];
-            const oz = obstacleSoA.positions[obsIdx * 2 + 1];
-            const diffX = carState.x - ox;
-            const diffZ = carState.z - oz;
-            const distSq = diffX * diffX + diffZ * diffZ;
-            const minDist = vehicleRadius + obstacleSoA.radii[obsIdx];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const cx = centerCellX + dx;
+        const cz = centerCellZ + dz;
+        if (cx >= 0 && cx < GRID_DIM && cz >= 0 && cz < GRID_DIM) {
+          const cellIdx = cz * GRID_DIM + cx;
+          const obstacles = spatialGrid[cellIdx];
+          for (let k = 0; k < obstacles.length; k++) {
+            const obsIdx = obstacles[k];
+            if (obstacleSoA.states[obsIdx] === 0) {
+              const ox = obstacleSoA.positions[obsIdx * 2];
+              const oz = obstacleSoA.positions[obsIdx * 2 + 1];
+              const diffX = carState.x - ox;
+              const diffZ = carState.z - oz;
+              const distSq = diffX * diffX + diffZ * diffZ;
+              const minDist = vehicleRadius + obstacleSoA.radii[obsIdx];
 
-            if (distSq < minDist * minDist) {
-              isCollidingThisFrame = true;
-              obstacleSoA.states[obsIdx] = 1; // Crumbling
-              obstacleSoA.crumbleProgress[obsIdx] = 0;
-              obstacleSoA.tipDirs[obsIdx * 2] = forwardX;
-              obstacleSoA.tipDirs[obsIdx * 2 + 1] = forwardZ;
+              if (distSq < minDist * minDist) {
+                isCollidingThisFrame = true;
+                obstacleSoA.states[obsIdx] = 1;
+                obstacleSoA.crumbleProgress[obsIdx] = 0;
+                obstacleSoA.tipDirs[obsIdx * 2] = forwardX;
+                obstacleSoA.tipDirs[obsIdx * 2 + 1] = forwardZ;
 
-              const typeId = obstacleSoA.types[obsIdx];
-              const soundType = typeId === 1 ? 'house' : (typeId === 2 ? 'barn' : (typeId === 3 ? 'hay' : (typeId === 4 ? 'block' : 'tree')));
-              soundEngine.playTopple(soundType);
-              spawnParticles(ox, 2.0, oz, 16);
+                const typeId = obstacleSoA.types[obsIdx];
+                const soundType = typeId === 1 ? 'house' : (typeId === 2 ? 'barn' : (typeId === 3 ? 'hay' : (typeId === 4 ? 'block' : 'tree')));
+                soundEngine.playTopple(soundType);
+                spawnParticles(ox, 2.0, oz, 16);
 
-              carState.collisionCount++;
-              const scoreText = document.getElementById('scoreText');
-              if (scoreText) scoreText.textContent = `${carState.collisionCount} Smashed!`;
+                carState.collisionCount++;
+                const scoreText = document.getElementById('scoreText');
+                if (scoreText) scoreText.textContent = `${carState.collisionCount} Smashed!`;
 
-              if (carState.collisionCount % 10 === 0) {
-                soundEngine.playCheer();
+                if (carState.collisionCount % 10 === 0) {
+                  soundEngine.playCheer();
+                }
               }
             }
           }
@@ -796,28 +796,27 @@ function checkCollisionsAndDrive(dt) {
     }
   }
 
-  // 5. Smooth Speed Dynamics: Slow down slightly to ~30% when crashing through, NEVER stop completely!
+  // 4. Smooth speed dynamics: slows down to ~30% when pushing through obstacles, NEVER stops
   const targetSpeed = isCollidingThisFrame ? currentVehicleDef.minSlowdownSpeed : currentVehicleDef.baseSpeed;
   const accelRate = isCollidingThisFrame ? 18.0 : 6.0;
   carState.currentSpeed += (targetSpeed - carState.currentSpeed) * Math.min(1.0, dt * accelRate);
 
-  soundEngine.updateEnginePitch(carState.currentSpeed / currentVehicleDef.baseSpeed);
+  soundEngine.updateEnginePitch(totalForwardSpeed / currentVehicleDef.baseSpeed);
 
-  // 6. Update Vehicle 3D Transform
+  // 5. Update Vehicle 3D Transform (X, Y, Z, Yaw, Pitch, Roll)
   if (currentVehicleMesh) {
-    currentVehicleMesh.position.set(carState.x, 0, carState.z);
-    currentVehicleMesh.rotation.y = carState.angle;
+    currentVehicleMesh.position.set(carState.x, carState.y, carState.z);
+    currentVehicleMesh.rotation.set(carState.pitch, carState.angle, carState.roll, 'YXZ');
 
-    // Wheel rolling animation
-    const rollSpeed = (carState.currentSpeed / 0.6) * dt;
+    const rollSpeed = (totalForwardSpeed / 0.6) * dt;
     for (let w = 0; w < currentWheels.length; w++) {
       currentWheels[w].children[0].rotation.x += rollSpeed;
     }
   }
 
-  // 7. Update Third-Person Chase Camera
+  // 6. Camera follows vehicle smoothly
   const camDist = currentVehicleDef.id === 'bus' ? 19.0 : 16.0;
-  const camHeight = currentVehicleDef.id === 'bus' ? 9.5 : 8.5;
+  const camHeight = (currentVehicleDef.id === 'bus' ? 9.5 : 8.5) + carState.y * 0.45;
 
   const desiredCamX = carState.x - Math.sin(carState.angle) * camDist;
   const desiredCamZ = carState.z - Math.cos(carState.angle) * camDist;
@@ -827,15 +826,154 @@ function checkCollisionsAndDrive(dt) {
   camera.position.y += (desiredCamY - camera.position.y) * Math.min(1.0, dt * 5.0);
   camera.position.z += (desiredCamZ - camera.position.z) * Math.min(1.0, dt * 5.0);
 
-  camera.lookAt(carState.x, 1.6, carState.z);
+  camera.lookAt(carState.x, 1.6 + carState.y * 0.8, carState.z);
 
-  // Sunlight tracks car position
-  sunLight.position.set(carState.x + 50, 100, carState.z + 70);
-  sunLight.target.position.set(carState.x, 0, carState.z);
+  sunLight.position.set(carState.x + 60, 110 + carState.y, carState.z + 70);
+  sunLight.target.position.set(carState.x, carState.y, carState.z);
+}
+
+// Trigger God Mode physical launch / toss
+export function triggerGodLaunch(liftAmount = 18.0, tossAmount = 14.0) {
+  if (!godModeEnabled) return;
+
+  if (liftForceEnabled && liftAmount > 0) {
+    carState.vy = Math.min(32.0, 14.0 + liftAmount * 0.8);
+    carState.isAirborne = true;
+    carState.pitch = -0.22;
+    soundEngine.playFlightSwoosh();
+    spawnParticles(carState.x, carState.y + 0.5, carState.z, 20);
+  }
+
+  if (tossForceEnabled && tossAmount > 0) {
+    carState.bonusSpeed = Math.min(26.0, tossAmount * 1.1);
+    soundEngine.playFlightSwoosh();
+  }
 }
 
 // ==========================================
-// 9. PEERJS WEBRTC PAIRING & INPUT HANDLING
+// 9. DYNAMIC CUSTOM VEHICLE IMPORTER (Drop & File Picker)
+// ==========================================
+export async function loadCustomVehicleScript(codeString, fileName = 'custom_car.js') {
+  try {
+    const blob = new Blob([codeString], { type: 'application/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    const module = await import(blobUrl);
+
+    // Support default export or named export
+    const customDef = module.default || module.Vehicle || Object.values(module)[0];
+
+    if (!customDef || typeof customDef.createMesh !== 'function') {
+      alert('Custom vehicle file must export an object with createMesh(THREE, mergeGeometries).');
+      return;
+    }
+
+    if (!customDef.id) customDef.id = 'custom_' + Date.now();
+    if (!customDef.name) customDef.name = fileName.replace('.js', '');
+    if (!customDef.icon) customDef.icon = '⭐';
+    if (!customDef.baseSpeed) customDef.baseSpeed = 12.0;
+    if (!customDef.minSlowdownSpeed) customDef.minSlowdownSpeed = 4.0;
+
+    // Check if vehicle already exists in registry
+    const existingIdx = VEHICLES.findIndex(v => v.id === customDef.id);
+    if (existingIdx >= 0) {
+      VEHICLES[existingIdx] = customDef;
+    } else {
+      VEHICLES.push(customDef);
+    }
+
+    // Save in localStorage to persist across reloads
+    localStorage.setItem('toycar_custom_js', codeString);
+    localStorage.setItem('toycar_custom_name', customDef.name);
+
+    // Rebuild vehicle menu & mount
+    rebuildVehicleMenu();
+    mountVehicle(customDef);
+
+    // Show celebratory toast
+    const hornBubble = document.getElementById('hornBubble');
+    if (hornBubble) {
+      hornBubble.textContent = `🚀 Loaded ${customDef.name}!`;
+      hornBubble.classList.add('active');
+      setTimeout(() => hornBubble.classList.remove('active'), 1200);
+    }
+  } catch (err) {
+    console.error('Failed to load custom vehicle:', err);
+    alert('Error loading vehicle script: ' + err.message);
+  }
+}
+
+// Check saved custom vehicle on startup
+const savedCustomCode = localStorage.getItem('toycar_custom_js');
+if (savedCustomCode) {
+  loadCustomVehicleScript(savedCustomCode, localStorage.getItem('toycar_custom_name') || 'custom_car.js');
+}
+
+// Setup Drag & Drop on the window
+const dropOverlay = document.getElementById('dropOverlay');
+
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  if (dropOverlay) dropOverlay.classList.add('active');
+});
+
+window.addEventListener('dragleave', (e) => {
+  if (e.relatedTarget === null && dropOverlay) {
+    dropOverlay.classList.remove('active');
+  }
+});
+
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  if (dropOverlay) dropOverlay.classList.remove('active');
+
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) {
+    const file = files[0];
+    if (file.name.endsWith('.js') || file.type.includes('javascript') || file.type.includes('text')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        loadCustomVehicleScript(event.target.result, file.name);
+      };
+      reader.readAsText(file);
+    } else {
+      alert('Please drop a valid .js vehicle file.');
+    }
+  }
+});
+
+// File input picker trigger
+const addVehicleFileInput = document.getElementById('addVehicleFileInput');
+if (addVehicleFileInput) {
+  addVehicleFileInput.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        loadCustomVehicleScript(event.target.result, file.name);
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// Download Sample Template JS Button
+const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+if (downloadTemplateBtn) {
+  downloadTemplateBtn.addEventListener('click', () => {
+    fetch('/src/vehicles/custom_template.js')
+      .then(res => res.text())
+      .then(code => {
+        const blob = new Blob([code], { type: 'text/javascript' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'rocket-car.js';
+        a.click();
+      });
+  });
+}
+
+// ==========================================
+// 10. PEERJS WEBRTC PAIRING & INPUT HANDLING
 // ==========================================
 const roomCodeVal = document.getElementById('roomCodeVal');
 const pairingOverlay = document.getElementById('pairingOverlay');
@@ -854,7 +992,6 @@ if (roomCodeVal) roomCodeVal.textContent = persistentRoomCode;
 const phoneUrl = `${window.location.origin}/phone.html?peer=${fullPeerId}`;
 if (phoneControllerLink) phoneControllerLink.href = phoneUrl;
 
-// Generate QR Code with persistent URL
 const qrContainer = document.getElementById('qrcode');
 if (qrContainer && window.QRCode) {
   new QRCode(qrContainer, {
@@ -867,7 +1004,6 @@ if (qrContainer && window.QRCode) {
   });
 }
 
-// PeerJS Host Instance
 let peer = null;
 let activeConnection = null;
 
@@ -905,7 +1041,6 @@ function initHostPeer() {
       if (!data) return;
       if (data.type === 'steer') {
         if (typeof data.angle === 'number') {
-          // If PC invert is enabled, flip sign
           let angle = data.angle;
           if (invertSteeringPC) angle = -angle;
           carState.targetAngle = angle;
@@ -915,11 +1050,13 @@ function initHostPeer() {
       } else if (data.type === 'horn') {
         soundEngine.playHorn();
         if (hornBubble) {
+          hornBubble.textContent = '🎺 BEEP BEEP!';
           hornBubble.classList.add('active');
-          setTimeout(() => {
-            hornBubble.classList.remove('active');
-          }, 800);
+          setTimeout(() => hornBubble.classList.remove('active'), 800);
         }
+      } else if (data.type === 'god_motion') {
+        // Physical throw / lift received from phone accelerometer!
+        triggerGodLaunch(data.lift || 16.0, data.toss || 14.0);
       }
     });
 
@@ -942,10 +1079,10 @@ function updatePCInvertUI() {
   if (!invertTogglePCBtn) return;
   if (invertSteeringPC) {
     invertTogglePCBtn.classList.add('active');
-    invertTogglePCBtn.textContent = '🔄 Invert Steering: ON';
+    invertTogglePCBtn.textContent = '🔄 Invert: ON';
   } else {
     invertTogglePCBtn.classList.remove('active');
-    invertTogglePCBtn.textContent = '🔄 Invert Steering: OFF';
+    invertTogglePCBtn.textContent = '🔄 Invert: OFF';
   }
 }
 updatePCInvertUI();
@@ -958,15 +1095,48 @@ if (invertTogglePCBtn) {
   });
 }
 
+// God Mode Controls in PC HUD
+const godModePCBtn = document.getElementById('godModePCBtn');
+const tossJumpPCBtn = document.getElementById('tossJumpPCBtn');
+
+function updateGodModePCUI() {
+  if (godModePCBtn) {
+    godModePCBtn.classList.toggle('active', godModeEnabled);
+    godModePCBtn.textContent = `🚀 God Mode: ${godModeEnabled ? 'ON' : 'OFF'}`;
+  }
+}
+updateGodModePCUI();
+
+if (godModePCBtn) {
+  godModePCBtn.addEventListener('click', () => {
+    godModeEnabled = !godModeEnabled;
+    localStorage.setItem('toycar_god_mode', godModeEnabled ? '1' : '0');
+    updateGodModePCUI();
+  });
+}
+
+if (tossJumpPCBtn) {
+  tossJumpPCBtn.addEventListener('click', () => {
+    soundEngine.init(currentVehicleDef);
+    triggerGodLaunch(18.0, 15.0);
+  });
+}
+
 // Keyboard Controls (Desktop Mode / Testing Fallback)
 const keysDown = {};
 window.addEventListener('keydown', (e) => {
   soundEngine.init(currentVehicleDef);
   keysDown[e.key.toLowerCase()] = true;
 
-  if (e.key === ' ' || e.key.toLowerCase() === 'h') {
+  // Spacebar = Jump / Toss car into air!
+  if (e.key === ' ') {
+    triggerGodLaunch(18.0, 14.0);
+  }
+
+  if (e.key.toLowerCase() === 'h') {
     soundEngine.playHorn();
     if (hornBubble) {
+      hornBubble.textContent = '🎺 BEEP BEEP!';
       hornBubble.classList.add('active');
       setTimeout(() => hornBubble.classList.remove('active'), 800);
     }
@@ -997,12 +1167,13 @@ function handleKeyboardInput(dt) {
 }
 
 // ==========================================
-// 10. UI & VEHICLE SELECTOR MENU
+// 11. UI & VEHICLE SELECTOR MENU
 // ==========================================
-// Setup Vehicle Selector Menu buttons
-const vehicleMenuContainer = document.getElementById('vehicleMenu');
-if (vehicleMenuContainer) {
+function rebuildVehicleMenu() {
+  const vehicleMenuContainer = document.getElementById('vehicleMenu');
+  if (!vehicleMenuContainer) return;
   vehicleMenuContainer.innerHTML = '';
+
   VEHICLES.forEach((v) => {
     const btn = document.createElement('button');
     btn.className = `vehicle-select-btn ${v.id === currentVehicleDef.id ? 'active' : ''}`;
@@ -1016,6 +1187,8 @@ if (vehicleMenuContainer) {
     vehicleMenuContainer.appendChild(btn);
   });
 }
+
+rebuildVehicleMenu();
 
 if (desktopModeBtn) {
   desktopModeBtn.addEventListener('click', () => {
@@ -1062,7 +1235,7 @@ if (toggleDockBtn && bottomDock) {
 }
 
 // ==========================================
-// 11. MAIN ANIMATION LOOP
+// 12. MAIN ANIMATION LOOP
 // ==========================================
 const clock = new THREE.Clock();
 
@@ -1077,7 +1250,8 @@ function animate() {
   updateParticles(dt);
 
   if (speedValue) {
-    speedValue.textContent = carState.currentSpeed.toFixed(1) + ' m/s';
+    const totalSpd = carState.currentSpeed + carState.bonusSpeed;
+    speedValue.textContent = totalSpd.toFixed(1) + ' m/s';
   }
 
   renderer.render(scene, camera);

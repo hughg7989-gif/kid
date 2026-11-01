@@ -24,7 +24,6 @@ export class SoundEngine {
       this.ctx = new AudioContext();
       this.initialized = true;
 
-      // Resume context if browser suspended it
       if (this.ctx.state === 'suspended') {
         const resumeAudio = () => {
           if (this.ctx && this.ctx.state === 'suspended') {
@@ -39,13 +38,11 @@ export class SoundEngine {
         window.addEventListener('touchstart', resumeAudio);
       }
 
-      // Continuous gentle toy engine oscillator
       this.engineOsc = this.ctx.createOscillator();
       this.engineOsc.type = vehicle?.engineType || 'sawtooth';
       const baseFreq = vehicle?.soundPitch || 60;
       this.engineOsc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
 
-      // Lowpass filter for warm, rounded toy sound
       this.filter = this.ctx.createBiquadFilter();
       this.filter.type = 'lowpass';
       this.filter.frequency.setValueAtTime(280, this.ctx.currentTime);
@@ -85,6 +82,48 @@ export class SoundEngine {
     this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.05);
   }
 
+  playFlightSwoosh() {
+    if (!this.ctx || this.muted) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(750, t + 0.35);
+
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.42);
+  }
+
+  playLandingThud() {
+    if (!this.ctx || this.muted) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(130, t);
+    osc.frequency.exponentialRampToValueAtTime(35, t + 0.25);
+
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.3);
+  }
+
   playTopple(objectType = 'tree') {
     if (!this.ctx || this.muted) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -94,28 +133,24 @@ export class SoundEngine {
     const gain = this.ctx.createGain();
 
     if (objectType === 'house' || objectType === 'barn') {
-      // Deeper rumble and wooden block clatter
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(140, t);
       osc.frequency.exponentialRampToValueAtTime(45, t + 0.32);
       gain.gain.setValueAtTime(0.2, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
     } else if (objectType === 'block' || objectType === 'barrel') {
-      // Fun toy block pop / metallic boing
       osc.type = 'square';
       osc.frequency.setValueAtTime(440, t);
       osc.frequency.exponentialRampToValueAtTime(110, t + 0.22);
       gain.gain.setValueAtTime(0.12, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
     } else if (objectType === 'hay') {
-      // Soft rustling thud
       osc.type = 'sine';
       osc.frequency.setValueAtTime(180, t);
       osc.frequency.exponentialRampToValueAtTime(60, t + 0.2);
       gain.gain.setValueAtTime(0.15, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
     } else {
-      // Default tree topple / boing
       osc.type = 'sine';
       osc.frequency.setValueAtTime(300, t);
       osc.frequency.exponentialRampToValueAtTime(80, t + 0.26);
