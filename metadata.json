@@ -1,0 +1,6 @@
+{
+  "name": "Toddler Toy Car 3D",
+  "description": "High-performance 3D toddler toy car game controlled by a smartphone mounted flat on a physical toy car using compass heading via WebRTC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
