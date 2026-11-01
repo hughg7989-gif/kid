@@ -16,6 +16,7 @@ let manualOffsetDeg = 0;         // Touch slider tweak
 
 let invertSteering = localStorage.getItem('toycar_invert_steering') === '1';
 let phoneFlip180 = localStorage.getItem('toycar_phone_flip180') === '1';
+let invertPitch = localStorage.getItem('toycar_phone_invert_pitch') !== '0'; // Default ON for natural tilt feel
 
 // View Mode: 'top_down' (default for kid) or 'sensors' (for parent/tuning)
 let currentViewMode = localStorage.getItem('toycar_phone_view') || 'top_down';
@@ -311,7 +312,11 @@ function initPeerConnection() {
         video.style.display = 'block';
         video.play().catch(e => console.warn('Stream play warning:', e));
         if (badge) badge.style.display = 'flex';
-        if (canvas) canvas.style.opacity = '0.2';
+        // When live video stream is playing, hide the 2D canvas completely!
+        // This ensures zero ghost or nested/small cars inside the main car.
+        if (canvas) {
+          canvas.style.display = 'none';
+        }
       }
     });
   });
@@ -429,14 +434,8 @@ function updateFlip180UI() {
 }
 
 function compute3DOrientation() {
-  // Prevent sensor gimbal flip: when a phone rolls upside down or screen faces down,
-  // native sensors invert alpha by 180 degrees.
-  // We un-invert it so the front of the car stays facing the front!
-  const isUpsideDown = Math.abs(currentRawBeta) > 90 || Math.abs(currentRawGamma) > 90;
+  // Use natural compass heading without artificial 180 flips
   let rawAlpha = currentRawAlpha;
-  if (isUpsideDown) {
-    rawAlpha = (rawAlpha + 180) % 360;
-  }
 
   // 1. Yaw (Compass heading)
   let diffAlpha = rawAlpha - zeroAlpha;
@@ -462,9 +461,15 @@ function compute3DOrientation() {
   let diffBetaDeg = currentRawBeta - zeroBeta;
   let diffGammaDeg = currentRawGamma - zeroGamma;
 
-  if (invertSteering) {
+  // When phone is flipped 180 backwards, tilt axes invert relative to car body
+  if (phoneFlip180) {
     diffBetaDeg = -diffBetaDeg;
     diffGammaDeg = -diffGammaDeg;
+  }
+
+  // Tilt Up/Down Invert Toggle
+  if (invertPitch) {
+    diffBetaDeg = -diffBetaDeg;
   }
 
   relativePitchRad = (diffBetaDeg * Math.PI) / 180;
@@ -666,31 +671,62 @@ if (phoneFlip180Btn) {
 }
 updateFlip180UI();
 
+const phoneInvertTiltBtn = document.getElementById('phoneInvertTiltBtn');
+function updateInvertTiltUI() {
+  if (!phoneInvertTiltBtn) return;
+  phoneInvertTiltBtn.style.color = invertPitch ? '#34d399' : '#94a3b8';
+  phoneInvertTiltBtn.style.borderColor = invertPitch ? '#34d399' : 'rgba(255,255,255,0.2)';
+  phoneInvertTiltBtn.textContent = invertPitch ? '↕️ Tilt: INV' : '↕️ Tilt: NORM';
+}
+updateInvertTiltUI();
+
+if (phoneInvertTiltBtn) {
+  phoneInvertTiltBtn.addEventListener('click', () => {
+    if (navigator.vibrate) navigator.vibrate(30);
+    invertPitch = !invertPitch;
+    localStorage.setItem('toycar_phone_invert_pitch', invertPitch ? '1' : '0');
+    updateInvertTiltUI();
+    compute3DOrientation();
+    if (conn && conn.open) {
+      conn.send({ type: 'parent_command', action: 'toggle_invert_pitch', invert: invertPitch });
+    }
+  });
+}
+
 const phoneCamTopDownBtn = document.getElementById('phoneCamTopDownBtn');
+const phoneCamFreeBtn = document.getElementById('phoneCamFreeBtn');
 const phoneCamChaseBtn = document.getElementById('phoneCamChaseBtn');
+
+function setPhoneCamActive(activeBtn) {
+  [phoneCamTopDownBtn, phoneCamFreeBtn, phoneCamChaseBtn].forEach(btn => {
+    if (!btn) return;
+    const isActive = btn === activeBtn;
+    btn.style.color = isActive ? '#38bdf8' : '#cbd5e1';
+    btn.style.borderColor = isActive ? '#38bdf8' : 'rgba(255,255,255,0.2)';
+  });
+}
 
 if (phoneCamTopDownBtn) {
   phoneCamTopDownBtn.addEventListener('click', () => {
-    phoneCamTopDownBtn.style.color = '#38bdf8';
-    phoneCamTopDownBtn.style.borderColor = '#38bdf8';
-    if (phoneCamChaseBtn) {
-      phoneCamChaseBtn.style.color = '#cbd5e1';
-      phoneCamChaseBtn.style.borderColor = 'rgba(255,255,255,0.2)';
-    }
+    setPhoneCamActive(phoneCamTopDownBtn);
     if (conn && conn.open) {
       conn.send({ type: 'parent_command', action: 'set_camera_preset', preset: 4 });
     }
   });
 }
 
+if (phoneCamFreeBtn) {
+  phoneCamFreeBtn.addEventListener('click', () => {
+    setPhoneCamActive(phoneCamFreeBtn);
+    if (conn && conn.open) {
+      conn.send({ type: 'parent_command', action: 'set_camera_preset', preset: 1 });
+    }
+  });
+}
+
 if (phoneCamChaseBtn) {
   phoneCamChaseBtn.addEventListener('click', () => {
-    phoneCamChaseBtn.style.color = '#38bdf8';
-    phoneCamChaseBtn.style.borderColor = '#38bdf8';
-    if (phoneCamTopDownBtn) {
-      phoneCamTopDownBtn.style.color = '#cbd5e1';
-      phoneCamTopDownBtn.style.borderColor = 'rgba(255,255,255,0.2)';
-    }
+    setPhoneCamActive(phoneCamChaseBtn);
     if (conn && conn.open) {
       conn.send({ type: 'parent_command', action: 'set_camera_preset', preset: 2 });
     }
@@ -914,6 +950,13 @@ function renderTopDownLoop(timestamp) {
   requestAnimationFrame(renderTopDownLoop);
   if (!topDownCanvas || currentViewMode !== 'top_down') return;
 
+  const video = document.getElementById('gameplayStreamVideo');
+  // If the live 3D video stream is active and playing, do not render duplicate 2D graphics!
+  if (video && video.style.display !== 'none' && video.videoWidth > 0) {
+    topDownCanvas.style.display = 'none';
+    return;
+  }
+
   const dt = Math.min((timestamp - lastFrameTime) / 1000, 0.1);
   lastFrameTime = timestamp;
 
@@ -921,65 +964,35 @@ function renderTopDownLoop(timestamp) {
   const w = topDownCanvas.width;
   const h = topDownCanvas.height;
 
-  // Cruise forward scroll
-  const speed = (currentVehicleInfo.baseSpeed || 11.0) * 16.0;
-  roadScrollOffset = (roadScrollOffset + speed * dt) % 120;
+  // Clear canvas completely
+  ctx.clearRect(0, 0, w, h);
 
-  // 1. Meadow green ground
+  // Clean, soft meadow playground background (No fake asphalt road that follows car)
   ctx.fillStyle = '#86efac';
   ctx.fillRect(0, 0, w, h);
 
-  // 2. Checker grass tile accents
-  ctx.fillStyle = '#6ee7b7';
-  const tileSize = 60;
-  for (let x = 0; x < w; x += tileSize) {
-    for (let y = (roadScrollOffset % tileSize) - tileSize; y < h; y += tileSize) {
-      if (((x / tileSize) + Math.floor(y / tileSize)) % 2 === 0) {
-        ctx.fillRect(x, y, tileSize, tileSize);
-      }
-    }
-  }
-
-  // 3. Wide Asphalt Road centered vertically
-  const roadWidth = Math.min(w * 0.65, 340);
-  const roadX = (w - roadWidth) / 2;
-
-  // Curbs
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(roadX - 8, 0, roadWidth + 16, h);
-
-  // Asphalt
-  ctx.fillStyle = '#334155';
-  ctx.fillRect(roadX, 0, roadWidth, h);
-
-  // White edge lines
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(roadX + 8, 0, 4, h);
-  ctx.fillRect(roadX + roadWidth - 12, 0, 4, h);
-
-  // Yellow dashed centerline
-  ctx.fillStyle = '#facc15';
-  const dashLength = 40;
-  const gap = 30;
-  const totalDash = dashLength + gap;
-  const startY = (roadScrollOffset % totalDash) - totalDash;
-  for (let y = startY; y < h; y += totalDash) {
-    ctx.fillRect(w / 2 - 3, y, 6, dashLength);
-  }
-
-  // 4. Little roadside trees
-  ctx.fillStyle = '#15803d';
-  for (let y = ((roadScrollOffset * 0.8) % 180) - 180; y < h; y += 180) {
+  // Subtle circular compass radar grid centered on car
+  const cx = w / 2;
+  const cy = h / 2;
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
+  ctx.lineWidth = 2;
+  [80, 160, 240].forEach(r => {
     ctx.beginPath();
-    ctx.arc(roadX - 35, y + 50, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(roadX + roadWidth + 35, y + 110, 16, 0, Math.PI * 2);
-    ctx.fill();
-  }
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  });
 
-  // 5. Draw Selected Top-Down Car in the middle of phone screen
-  drawTopDownCar(ctx, w / 2, h / 2, currentVehicleInfo.id);
+  // Crosshair guidelines
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 250);
+  ctx.lineTo(cx, cy + 250);
+  ctx.moveTo(cx - 250, cy);
+  ctx.lineTo(cx + 250, cy);
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.25)';
+  ctx.stroke();
+
+  // Draw the single vehicle centered and rotated to compass heading
+  drawTopDownCar(ctx, cx, cy, currentVehicleInfo.id);
 }
 
 requestAnimationFrame(renderTopDownLoop);

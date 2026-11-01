@@ -555,11 +555,22 @@ const carState = {
 function mountVehicle(vehicleDef) {
   if (currentVehicleMesh) {
     scene.remove(currentVehicleMesh);
+    currentVehicleMesh.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      }
+    });
+    currentVehicleMesh = null;
   }
+  currentWheels = [];
   currentVehicleDef = vehicleDef;
   const { group, wheels } = vehicleDef.createMesh(THREE, mergeGeometries);
   currentVehicleMesh = group;
-  currentWheels = wheels;
+  currentWheels = wheels || [];
   scene.add(currentVehicleMesh);
 
   soundEngine.setVehicle(vehicleDef);
@@ -1032,9 +1043,71 @@ let isFreeCamDragging = false;
 let lastMouseX = 0;
 let lastMouseY = 0;
 
-// Mouse Drag for Free Orbit Cam
-renderer.domElement.addEventListener('pointerdown', (e) => {
+export function syncCameraSlidersToConfig() {
+  const camDistSlider = document.getElementById('camDistSlider');
+  const camDistVal = document.getElementById('camDistVal');
+  const camHeightSlider = document.getElementById('camHeightSlider');
+  const camHeightVal = document.getElementById('camHeightVal');
+  const camTargetHeightSlider = document.getElementById('camTargetHeightSlider');
+  const camTargetHeightVal = document.getElementById('camTargetHeightVal');
+  const toggleCamFollowRotBtn = document.getElementById('toggleCamFollowRotBtn');
+
+  if (camDistSlider) camDistSlider.value = cameraConfig.dist;
+  if (camDistVal) camDistVal.textContent = cameraConfig.dist.toFixed(1) + 'm';
+  if (camHeightSlider) camHeightSlider.value = cameraConfig.height;
+  if (camHeightVal) camHeightVal.textContent = cameraConfig.height.toFixed(1) + 'm';
+  if (camTargetHeightSlider) camTargetHeightSlider.value = cameraConfig.targetHeight || 1.2;
+  if (camTargetHeightVal) camTargetHeightVal.textContent = (cameraConfig.targetHeight || 1.2).toFixed(1) + 'm';
+
+  if (toggleCamFollowRotBtn) {
+    toggleCamFollowRotBtn.classList.toggle('active-green', cameraConfig.followRotation);
+    toggleCamFollowRotBtn.textContent = cameraConfig.followRotation ? '✓ Follows Car Rotation: ON' : '✕ Follows Car Rotation: OFF';
+  }
+}
+
+export function applyCameraPreset(slotNum) {
+  const slotKey = String(slotNum);
+  const preset = cameraPresets[slotKey] || DEFAULT_CAMERA_PRESETS[slotKey] || cameraPresets[1];
+  activePresetSlot = parseInt(slotKey, 10) || 1;
+  cameraConfig = { ...preset };
+
+  localStorage.setItem('toycar_active_cam_slot', String(activePresetSlot));
+
   if (cameraConfig.mode === 'free') {
+    freeCamAzimuth = 0;
+    freeCamElevation = 0.44;
+  }
+
+  ['1', '2', '3', '4', '5'].forEach(id => {
+    const btn = document.getElementById(`camPreset${id}Btn`);
+    if (btn) {
+      btn.classList.toggle('active', id === slotKey);
+    }
+  });
+
+  syncCameraSlidersToConfig();
+
+  showGameNotification(`📷 ${cameraConfig.name || ('Mode ' + slotKey)}`, 1200);
+
+  if (activeConnection && activeConnection.open) {
+    activeConnection.send({
+      type: 'parent_command',
+      action: 'camera_preset_changed',
+      preset: activePresetSlot,
+      mode: cameraConfig.mode
+    });
+  }
+}
+
+// Initial sync
+syncCameraSlidersToConfig();
+
+// Mouse & Touch Drag for Free Orbit Cam
+window.addEventListener('pointerdown', (e) => {
+  if (cameraConfig.mode === 'free') {
+    if (e.target.closest('button, input, textarea, a, .modal-card, .garage-card, .pairing-card, .dock-container, .hud-top')) {
+      return;
+    }
     isFreeCamDragging = true;
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
@@ -1049,54 +1122,56 @@ window.addEventListener('pointermove', (e) => {
     lastMouseY = e.clientY;
 
     freeCamAzimuth -= dx * 0.007;
-    freeCamElevation = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, freeCamElevation + dy * 0.007));
+    freeCamElevation = Math.max(0.08, Math.min(Math.PI / 2 - 0.04, freeCamElevation + dy * 0.007));
   }
 });
 
 window.addEventListener('pointerup', () => {
   isFreeCamDragging = false;
 });
+window.addEventListener('pointercancel', () => {
+  isFreeCamDragging = false;
+});
 
-renderer.domElement.addEventListener('wheel', (e) => {
+window.addEventListener('wheel', (e) => {
   if (cameraConfig.mode === 'free') {
-    e.preventDefault();
+    if (e.target.closest('.modal-card, .garage-card')) return;
     cameraConfig.dist = Math.max(6, Math.min(65, cameraConfig.dist + e.deltaY * 0.025));
     const distSlider = document.getElementById('camDistSlider');
     const distVal = document.getElementById('camDistVal');
     if (distSlider) distSlider.value = cameraConfig.dist;
     if (distVal) distVal.textContent = cameraConfig.dist.toFixed(1) + 'm';
   }
-}, { passive: false });
+}, { passive: true });
 
 function updateCameraPerspective(dt) {
   let desiredCamX, desiredCamZ, desiredCamY;
 
-  if (cameraConfig.followRotation) {
-    // Mode 1: Rotates behind car heading
+  if (cameraConfig.mode === 'top_down') {
+    // Mode 4: Top-Down Bird's Eye (stable vector without gimbal lock)
+    desiredCamX = carState.x;
+    desiredCamZ = carState.z - 0.45;
+    desiredCamY = cameraConfig.height + carState.y;
+  } else if (cameraConfig.followRotation) {
+    // Mode 2: Chase Follow (rotates behind car heading)
     desiredCamX = carState.x - Math.sin(carState.angle) * cameraConfig.dist;
     desiredCamZ = carState.z - Math.cos(carState.angle) * cameraConfig.dist;
     desiredCamY = cameraConfig.height + carState.y * 0.45;
   } else if (cameraConfig.mode === 'isometric') {
-    // Mode 3: High Isometric (Fixed angle SW)
+    // Mode 5: High Isometric (Fixed angle SW)
     const isoDist = cameraConfig.dist * 0.7071;
     desiredCamX = carState.x - isoDist;
     desiredCamZ = carState.z - isoDist;
     desiredCamY = cameraConfig.height + carState.y * 0.45;
-  } else if (cameraConfig.mode === 'top_down') {
-    // Mode 4: Top-Down Bird's Eye
-    desiredCamX = carState.x;
-    desiredCamZ = carState.z - 0.01;
-    desiredCamY = cameraConfig.height + carState.y;
   } else if (cameraConfig.mode === 'free') {
-    // Mode 5: Free Mouse Orbit
+    // Mode 1: Free Mouse Orbit
     const cosEl = Math.cos(freeCamElevation);
     const sinEl = Math.sin(freeCamElevation);
     desiredCamX = carState.x + Math.sin(freeCamAzimuth) * cosEl * cameraConfig.dist;
     desiredCamZ = carState.z - Math.cos(freeCamAzimuth) * cosEl * cameraConfig.dist;
-    desiredCamY = carState.y + Math.max(2.0, sinEl * cameraConfig.dist);
+    desiredCamY = carState.y + Math.max(1.8, sinEl * cameraConfig.dist);
   } else {
-    // Mode 2: "Fixed North (Unmoved)" - Camera stays directly behind car along world -Z axis!
-    // As the toddler turns their real toy car right, virtual car turns right on screen!
+    // Mode 3: "Fixed North (Unmoved)" - Camera stays directly behind car along world -Z axis!
     desiredCamX = carState.x;
     desiredCamZ = carState.z - cameraConfig.dist;
     desiredCamY = cameraConfig.height + carState.y * 0.45;
@@ -1274,21 +1349,33 @@ export default {
 export function sanitizeAndExtractVehicleCode(raw) {
   let code = (raw || '').trim();
 
-  // 1. If wrapped in markdown code fence, extract code block
+  // 1. Strip citation annotations before or inside markdown code fences, e.g. [cite: 1], [```[cite: 1]], [[cite: 1]]
+  code = code.replace(/\[+`*\[*cite:\s*[^\]]+\]+`*\]*/gi, '');
+  code = code.replace(/\[cite:\s*\d+\]/gi, '');
+
+  // 2. Extract code block from markdown ```javascript ... ```
   const markdownMatch = code.match(/```(?:javascript|js)?\s*([\s\S]*?)```/);
   if (markdownMatch && markdownMatch[1]) {
     code = markdownMatch[1].trim();
+  } else {
+    code = code.replace(/^```(?:javascript|js)?\s*/i, '');
+    code = code.replace(/```+\s*$/i, '');
   }
 
-  // 2. Strip any ES import statements so dynamic import doesn't fail on missing modules
+  // 3. Strip any leftover citation tags or stray bracketed numbers
+  code = code.replace(/\[+`*\[*cite:\s*[^\]]+\]+`*\]*/gi, '');
+  code = code.replace(/\[cite:\s*\d+\]/gi, '');
+  code = code.replace(/\[\d+\]\s*$/g, '');
+
+  // 4. Strip any ES import statements so dynamic import doesn't fail on missing modules
   code = code.replace(/import\s+[^;]+;?/g, '// [stripped import]');
 
-  // 3. Handle CommonJS module.exports = ...
+  // 5. Handle CommonJS module.exports = ...
   if (/module\.exports\s*=/.test(code)) {
     code = code.replace(/module\.exports\s*=/, 'export default ');
   }
 
-  // 4. If code assigns to a variable but forgot export default
+  // 6. If code assigns to a variable but forgot export default
   if (!code.includes('export default') && !code.includes('export const Vehicle') && !code.includes('export const ExcavatorVehicle')) {
     const varMatch = code.match(/(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*\{/);
     if (varMatch && varMatch[1]) {
@@ -1298,7 +1385,16 @@ export function sanitizeAndExtractVehicleCode(raw) {
     }
   }
 
-  return code;
+  // 7. Strip any trailing commentary, notes, or non-JS artifacts after the final closing statement
+  const lastSemiIdx = code.lastIndexOf('};');
+  if (lastSemiIdx !== -1) {
+    const afterSemi = code.slice(lastSemiIdx + 2).trim();
+    if (afterSemi && !afterSemi.startsWith('export')) {
+      code = code.slice(0, lastSemiIdx + 2);
+    }
+  }
+
+  return code.trim();
 }
 
 export async function loadCustomVehicleScript(codeString, fileName = 'custom_car.js') {
@@ -1467,6 +1563,11 @@ CRITICAL TECHNICAL RULES (PREVENT TECHNICAL / METHOD ERRORS):
 6. The vehicle points forward along the +Z axis.
 7. Return { group, wheels } where wheels is an array of wheel groups so they spin automatically.
 
+CRITICAL OUTPUT & ZERO CITATIONS ENFORCEMENT (FOLLOW TO A T):
+- Output ONLY the pure JavaScript code inside a single \`\`\`javascript code block.
+- DO NOT append ANY citations, footnotes, or annotation tags (such as [cite: 1], [cite: 2], or [1]) anywhere in or after the response.
+- DO NOT include conversational intro or concluding text. The entire response will be copied directly into a .js file as-is and executed by a browser engine; any deviation or non-JavaScript text will break the vehicle loader.
+
 OUTPUT FORMAT:
 Output ONLY the raw JavaScript code inside a single \`\`\`javascript code block:
 \`\`\`javascript
@@ -1616,6 +1717,23 @@ if (qrContainer && window.QRCode) {
 
 let peer = null;
 let activeConnection = null;
+let activeMediaCall = null;
+let invertPitchPC = localStorage.getItem('toycar_pc_invert_pitch') === '1';
+
+function streamVideoToPeer(remotePeerId) {
+  if (!renderer.domElement.captureStream || !peer) return;
+  try {
+    if (activeMediaCall) {
+      activeMediaCall.close();
+      activeMediaCall = null;
+    }
+    const stream = renderer.domElement.captureStream(30);
+    activeMediaCall = peer.call(remotePeerId, stream);
+    console.log('Initiated clean 3D gameplay canvas stream to phone:', remotePeerId);
+  } catch (err) {
+    console.warn('captureStream error:', err);
+  }
+}
 
 function initHostPeer() {
   if (!window.Peer) {
@@ -1646,16 +1764,8 @@ function initHostPeer() {
       if (connStatusText) connStatusText.textContent = 'PHONE CONNECTED 📱';
       if (inputModeValue) inputModeValue.textContent = 'Phone Gyro 3D';
 
-      // Start live 3D gameplay video stream to phone!
-      if (renderer.domElement.captureStream && peer) {
-        try {
-          const stream = renderer.domElement.captureStream(25);
-          peer.call(conn.peer, stream);
-          console.log('Initiated live 3D gameplay canvas stream to phone:', conn.peer);
-        } catch (err) {
-          console.warn('captureStream error:', err);
-        }
-      }
+      // Start live 3D gameplay video stream to phone with clean lifecycle
+      streamVideoToPeer(conn.peer);
 
       // Send active vehicle to phone so phone displays top-down mirror
       conn.send({
@@ -1682,7 +1792,9 @@ function initHostPeer() {
           if (headingValue) headingValue.textContent = deg + '°';
         }
         if (typeof data.pitch === 'number') {
-          carState.targetPitch = data.pitch;
+          let p = data.pitch;
+          if (invertPitchPC) p = -p;
+          carState.targetPitch = p;
         }
         if (typeof data.roll === 'number') {
           carState.targetRoll = data.roll;
@@ -1706,6 +1818,10 @@ function initHostPeer() {
       } else if (data.type === 'parent_command') {
         if (data.action === 'set_camera_preset') {
           applyCameraPreset(data.preset);
+        } else if (data.action === 'toggle_invert_pitch') {
+          invertPitchPC = typeof data.invert === 'boolean' ? data.invert : !invertPitchPC;
+          localStorage.setItem('toycar_pc_invert_pitch', invertPitchPC ? '1' : '0');
+          updateInvertPitchPCUI();
         } else if (data.action === 'recenter') {
           carState.angle = 0;
           carState.targetAngle = 0;
@@ -2104,6 +2220,67 @@ if (resetAlignmentBtn) {
       activeConnection.send({ type: 'parent_command', action: 'recenter' });
     }
     showGameNotification('↺ Heading Reset to 0° North', 1200);
+  });
+}
+
+// Invert Tilt (Pitch) Controls on PC
+const invertPitchPCBtn = document.getElementById('invertPitchPCBtn');
+const flipTiltPCBtn = document.getElementById('flipTiltPCBtn');
+
+function updateInvertPitchPCUI() {
+  if (invertPitchPCBtn) {
+    invertPitchPCBtn.classList.toggle('active', invertPitchPC);
+    invertPitchPCBtn.textContent = `↕️ Invert Tilt: ${invertPitchPC ? 'ON' : 'OFF'}`;
+  }
+  if (flipTiltPCBtn) {
+    flipTiltPCBtn.classList.toggle('active', invertPitchPC);
+    flipTiltPCBtn.textContent = invertPitchPC ? '✓ Tilt Inverted: ACTIVE' : '↕️ Invert Tilt (Up/Down)';
+  }
+}
+updateInvertPitchPCUI();
+
+if (invertPitchPCBtn) {
+  invertPitchPCBtn.addEventListener('click', () => {
+    invertPitchPC = !invertPitchPC;
+    localStorage.setItem('toycar_pc_invert_pitch', invertPitchPC ? '1' : '0');
+    updateInvertPitchPCUI();
+    showGameNotification(invertPitchPC ? '↕️ Tilt Invert: ON' : '↕️ Tilt Invert: OFF', 1200);
+  });
+}
+
+if (flipTiltPCBtn) {
+  flipTiltPCBtn.addEventListener('click', () => {
+    invertPitchPC = !invertPitchPC;
+    localStorage.setItem('toycar_pc_invert_pitch', invertPitchPC ? '1' : '0');
+    updateInvertPitchPCUI();
+    showGameNotification(invertPitchPC ? '↕️ Tilt Invert: ON' : '↕️ Tilt Invert: OFF', 1200);
+  });
+}
+
+// Camera Modal & Sliders Elements
+const cameraModal = document.getElementById('cameraModal');
+const cameraPanelBtn = document.getElementById('cameraPanelBtn');
+const closeCameraModalBtn = document.getElementById('closeCameraModalBtn');
+const camDistSlider = document.getElementById('camDistSlider');
+const camDistVal = document.getElementById('camDistVal');
+const camHeightSlider = document.getElementById('camHeightSlider');
+const camHeightVal = document.getElementById('camHeightVal');
+const camTargetHeightSlider = document.getElementById('camTargetHeightSlider');
+const camTargetHeightVal = document.getElementById('camTargetHeightVal');
+const toggleCamFollowRotBtn = document.getElementById('toggleCamFollowRotBtn');
+const copyCamConfigBtn = document.getElementById('copyCamConfigBtn');
+const resetCamDefaultsBtn = document.getElementById('resetCamDefaultsBtn');
+
+if (cameraPanelBtn && cameraModal) {
+  cameraPanelBtn.addEventListener('click', () => {
+    syncCameraSlidersToConfig();
+    cameraModal.style.display = 'flex';
+  });
+}
+
+if (closeCameraModalBtn && cameraModal) {
+  closeCameraModalBtn.addEventListener('click', () => {
+    cameraModal.style.display = 'none';
   });
 }
 
